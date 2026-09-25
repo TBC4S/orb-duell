@@ -129,6 +129,19 @@
   .rules dt { font-family: var(--disp); font-weight: 700; color: var(--ink); }
   .rules dd { margin: 0; }
   .rules .o { color: #B9A6FF; } .rules .g { color: var(--gold); } .rules .m { color: var(--mine); }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .25); }
+  .seg button { font: 700 13px var(--disp); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); background: none; border: 0; border-radius: 7px; padding: 9px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { color: #0B0620; background: var(--p1); box-shadow: 0 0 16px rgba(87, 225, 255, .35); }
+
+  /* ---------- Joystick ---------- */
+  #pad { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; justify-content: center; touch-action: none;
+    padding: 8px 16px calc(env(safe-area-inset-bottom, 0px) + 14px); --c: var(--p1); }
+  #pad .base { position: relative; width: 132px; height: 132px; border-radius: 50%; border: 1px solid var(--line);
+    background: radial-gradient(circle, rgba(20, 12, 48, .35), rgba(20, 12, 48, .8)); box-shadow: inset 0 0 26px rgba(160, 140, 255, .18); }
+  #pad .base::before { content: ""; position: absolute; inset: 30%; border-radius: 50%; border: 1px dashed var(--line); }
+  #pad .knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px; border-radius: 50%;
+    background: radial-gradient(circle at 38% 34%, #fff, var(--c) 55%); box-shadow: 0 0 20px var(--c); opacity: .85; }
+  #pad.on .knob { opacity: 1; }
   @media (prefers-reduced-motion: reduce) { #timer.hot, #status.wait .led, .conn.wait i, #toast, #players li.new { animation: none; } }
 </style>
 </head>
@@ -143,6 +156,8 @@
 </div>
 
 <div id="toast" hidden></div>
+
+<div id="pad" hidden><div class="base"><div class="knob"></div></div></div>
 
 <div id="overlay">
   <div class="card">
@@ -160,6 +175,13 @@
       <ul id="players"></ul>
     </div>
     <button id="go" type="button">Runde starten</button>
+    <div class="lobby">
+      <div class="label" id="ctllabel">Steuerung</div>
+      <div class="seg" role="group" aria-labelledby="ctllabel">
+        <button type="button" data-ctl="touch" aria-pressed="true">Finger</button>
+        <button type="button" data-ctl="stick" aria-pressed="false">Joystick</button>
+      </div>
+    </div>
     <label for="nick">Dein Name
       <input id="nick" maxlength="14" autocomplete="off" placeholder="z. B. Thorben">
     </label>
@@ -173,7 +195,7 @@
       <div class="joinrow"><input id="joincode" maxlength="8" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="z. B. k7px2"><button type="submit" class="ghost">Beitreten</button></div>
     </form>
     <dl class="rules">
-      <dt>Steuern</dt><dd>Finger aufs Feld, dein Schiff fliegt hinterher.</dd>
+      <dt>Steuern</dt><dd id="ctlhelp">Finger aufs Feld, dein Schiff fliegt hinterher.</dd>
       <dt class="o">Orb</dt><dd>+1 Punkt</dd>
       <dt class="g">Gold</dt><dd>+5 Punkte</dd>
       <dt class="m">Mine</dt><dd>−3 Punkte und kurz gelähmt</dd>
@@ -222,7 +244,8 @@
     dpr = Math.min(2, window.devicePixelRatio || 1);
     vw = innerWidth; vh = innerHeight;
     cv.width = vw * dpr; cv.height = vh * dpr;
-    const top = $("hud").getBoundingClientRect().bottom + 8, bottom = 10;
+    const top = $("hud").getBoundingClientRect().bottom + 8;
+    const bottom = $("pad").hidden ? 10 : vh - $("pad").getBoundingClientRect().top + 4;
     sc = Math.min((vw - 16) / W, (vh - top - bottom) / H);
     ox = (vw - W * sc) / 2; oy = top + ((vh - top - bottom) - H * sc) / 2;
     nebula = document.createElement("canvas"); nebula.width = Math.max(1, vw / 2); nebula.height = Math.max(1, vh / 2);
@@ -476,8 +499,36 @@
 
   // ---------- input ----------
   function toWorld(e) { return [clamp((e.clientX - ox) / sc, 40, W - 40), clamp((e.clientY - oy) / sc, 40, H - 40)]; }
-  cv.addEventListener("pointerdown", e => { audio(); try { cv.setPointerCapture(e.pointerId); } catch (x) { } [me.tx, me.ty] = toWorld(e); });
-  cv.addEventListener("pointermove", e => { if (e.pointerType === "mouse" || e.buttons || e.pressure > 0) [me.tx, me.ty] = toWorld(e); });
+  cv.addEventListener("pointerdown", e => { audio(); if (ctl === "stick") return; try { cv.setPointerCapture(e.pointerId); } catch (x) { } [me.tx, me.ty] = toWorld(e); });
+  cv.addEventListener("pointermove", e => { if (ctl !== "stick" && (e.pointerType === "mouse" || e.buttons || e.pressure > 0)) [me.tx, me.ty] = toWorld(e); });
+
+  // Joystick: Auslenkung = Richtung und Tempo, loslassen = Schiff bremst ab
+  const pad = $("pad"), knob = pad.querySelector(".knob"), stick = { id: null, x: 0, y: 0 };
+  let ctl = "touch";
+  try { ctl = localStorage.getItem("orbduell.ctl") === "stick" ? "stick" : "touch"; } catch (e) { }
+  function stickMove(e) {
+    const r = pad.querySelector(".base").getBoundingClientRect(), R = r.width / 2;
+    let dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R);
+    const m = Math.hypot(dx, dy); if (m > R) { dx *= R / m; dy *= R / m; }
+    const f = Math.hypot(dx, dy) / R < .12 ? 0 : 1;
+    stick.x = dx / R * f; stick.y = dy / R * f;
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+  function stickEnd(e) {
+    if (e.pointerId !== stick.id) return;
+    stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; pad.classList.remove("on");
+  }
+  pad.addEventListener("pointerdown", e => { audio(); stick.id = e.pointerId; try { pad.setPointerCapture(e.pointerId); } catch (x) { } pad.classList.add("on"); stickMove(e); });
+  pad.addEventListener("pointermove", e => { if (e.pointerId === stick.id) stickMove(e); });
+  pad.addEventListener("pointerup", stickEnd); pad.addEventListener("pointercancel", stickEnd); pad.addEventListener("lostpointercapture", stickEnd);
+  function setCtl(v) {
+    ctl = v; try { localStorage.setItem("orbduell.ctl", v); } catch (e) { }
+    document.querySelectorAll("[data-ctl]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ctl === v)));
+    $("ctlhelp").textContent = v === "stick" ? "Joystick unten schieben, loslassen bremst." : "Finger aufs Feld, dein Schiff fliegt hinterher.";
+    pad.hidden = v !== "stick"; stick.x = stick.y = 0; knob.style.transform = "";
+    me.tx = me.x; me.ty = me.y; resize();
+  }
+  document.querySelectorAll("[data-ctl]").forEach(b => b.addEventListener("click", () => setCtl(b.dataset.ctl)));
   document.addEventListener("pointerdown", audio, { once: true });
   $("go").addEventListener("click", () => {
     audio();
@@ -630,6 +681,7 @@
     setText("roomcode", code); setText("link", inviteUrl);
     setText("share", copiedUntil > now ? "Link kopiert!" : "Kumpels einladen");
     if (toastT > 0 && (toastT -= dt) <= 0) $("toast").hidden = true;
+    const kc = COL[mySlot ?? 0]; if (uiCache.kc !== kc) { uiCache.kc = kc; pad.style.setProperty("--c", kc); }
   }
 
   // ---------- render ----------
@@ -750,6 +802,7 @@
   function frame(t) {
     const dt = Math.min(.05, (t - last) / 1000); last = t; now += dt;
     roles();
+    if (ctl === "stick") { me.tx = me.x + stick.x * 200; me.ty = me.y + stick.y * 200; }
     if (mySlot !== null && S.ph !== "cd") moveShip(me, me.tx, me.ty, dt, S.st[mySlot] > 0 ? .25 : 1);
     if (isHost) hostStep(dt);
     const k = 1 - Math.exp(-dt * 12);
@@ -774,7 +827,7 @@
     render(dt);
     requestAnimationFrame(frame);
   }
-  resize();
+  setCtl(ctl);
   connectAll();
   requestAnimationFrame(frame);
 })();
