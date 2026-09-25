@@ -31,6 +31,23 @@
   #invite { display: flex; flex-direction: column; gap: 8px; }
   .ghost { font: 700 15px var(--disp); letter-spacing: .12em; text-transform: uppercase; color: var(--p1); background: rgba(87, 225, 255, .08); border: 1px solid var(--p1); border-radius: 10px; padding: 12px; cursor: pointer; }
   .ghost:active { transform: scale(.98); }
+  .mid { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .conn { display: flex; align-items: center; gap: 6px; font: 600 10px var(--disp); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding: 3px 8px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
+  .conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .conn.on { color: #6BFFB0; border-color: rgba(107, 255, 176, .45); }
+  .conn.on i { background: #6BFFB0; box-shadow: 0 0 8px #6BFFB0; }
+  .conn.wait i { background: var(--gold); animation: blink 1s steps(2) infinite; }
+  #toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 96px); transform: translateX(-50%); z-index: 4; max-width: calc(100% - 32px);
+    font: 700 20px var(--disp); letter-spacing: .04em; text-align: center; padding: 12px 20px; border-radius: 12px; color: #0B0620;
+    background: linear-gradient(90deg, #6BFFB0, var(--p1)); box-shadow: 0 0 36px rgba(107, 255, 176, .5); animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); pointer-events: none; }
+  #toast.bad { background: linear-gradient(90deg, var(--mine), var(--p2)); box-shadow: 0 0 36px rgba(255, 74, 61, .45); color: #fff; }
+  @keyframes pop { from { transform: translateX(-50%) scale(.6); opacity: 0; } }
+  .room { text-align: center; font: 600 12px var(--disp); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .room b { display: block; font-size: 30px; letter-spacing: .3em; color: var(--ink); margin-top: 2px; text-transform: none; }
+  .join { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+  .joinrow { display: flex; gap: 8px; }
+  .joinrow input { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .2em; }
+  .joinrow .ghost { padding: 10px 14px; font-size: 13px; }
   .link { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; user-select: text; -webkit-user-select: text; text-align: center; }
   html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
   body { font-family: var(--body); touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -103,9 +120,11 @@
 
 <div id="hud">
   <div class="chip a"><span class="dot"></span><div class="meta"><span class="name" id="n0">Spieler 1</span><span class="score" id="s0">0</span></div></div>
-  <div id="timer">60</div>
+  <div class="mid"><div id="timer">60</div><div id="conn" class="conn"><i></i><span id="conntext">Verbinde</span></div></div>
   <div class="chip b right"><div class="meta"><span class="name" id="n1">Bot</span><span class="score" id="s1">0</span></div><span class="dot"></span></div>
 </div>
+
+<div id="toast" hidden></div>
 
 <div id="overlay">
   <div class="card">
@@ -129,13 +148,18 @@
       <dt class="m">Mine</dt><dd>−3 Punkte und kurz gelähmt</dd>
     </dl>
     <div id="invite" hidden>
+      <div class="room">Dein Raum <b id="roomcode">-----</b></div>
       <button id="share" type="button" class="ghost">Kumpel einladen</button>
       <div class="link" id="link"></div>
     </div>
+    <form id="joinform" class="join">
+      <label for="joincode">Code vom Kumpel</label>
+      <div class="joinrow"><input id="joincode" maxlength="8" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="z. B. k7px2"><button type="submit" class="ghost">Beitreten</button></div>
+    </form>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script>
 (() => {
   "use strict";
@@ -193,6 +217,7 @@
   const sfx = {
     orb: () => tone(660, .12, "triangle", .12, 1.8),
     far: () => tone(330, .08, "triangle", .05, 1.4),
+    join: () => { tone(523, .12, "triangle", .12); tone(784, .12, "triangle", .12, 0, .1); tone(1046, .3, "triangle", .12, 0, .2); },
     gold: () => { tone(784, .1, "square", .06); tone(988, .1, "square", .06, 0, .08); tone(1318, .22, "square", .06, 0, .16); },
     hit: () => { tone(160, .35, "sawtooth", .16, .35); tone(90, .4, "square", .08, .5); },
     beep: () => tone(520, .12, "square", .07),
@@ -264,7 +289,7 @@
     const ms = dt * 1000;
     S.pl[0] = [me.x, me.y, me.a];
     if (S.p2 === "bot") { if (S.ph === "cd" || S.ph === "play") botStep(dt); S.pl[1] = [bot.x, bot.y, bot.a]; }
-    else if (S.p2 === "guest") {
+    else if (S.p2 !== "bot") {
       const pr = guestMsg;
       if (pr) {
         S.pl[1] = [num(pr.x, S.pl[1][0], 0, W), num(pr.y, S.pl[1][1], 0, H), num(pr.a, 0, -7, 7)];
@@ -318,71 +343,91 @@
     if (Array.isArray(st.pl)) for (let i = 0; i < 2; i++) { const p = st.pl[i]; if (Array.isArray(p)) S.pl[i] = [num(p[0], 450, 0, W), num(p[1], 750, 0, H), num(p[2], 0, -700, 700) / 100]; }
   }
 
-  // ---------- netzwerk: direkt Handy zu Handy (WebRTC über PeerJS) ----------
-  const PREFIX = "orbduell-v1-", ALPHA = "abcdefghjkmnpqrstuvwxyz23456789";
-  const code = (location.hash.match(/^#([a-z0-9]{6})$/) || [])[1] || null;
-  let net = "off", peer = null, conn = null, guestMsg = null, inviteUrl = "", lastSend = 0, failMsg = "", copiedUntil = 0;
+  // ---------- netzwerk: Spielraum über öffentliche MQTT-Server ----------
+  // Beide Handys verbinden sich mit denselben Servern und treffen sich im Raum (Code).
+  // Läuft über den Server, deshalb klappt es auch im Mobilfunknetz und hinter jedem Router.
+  const BROKERS = window.ORB_BROKERS || ["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt"];
+  const ALPHA = "abcdefghjkmnpqrstuvwxyz23456789";
+  const rid = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => ALPHA[b % ALPHA.length]).join("");
+  const myId = rid(10);
+  let code = (location.hash.match(/^#([a-z0-9]{4,8})$/) || [])[1] || null;
+  if (!code) { code = rid(5); try { history.replaceState(null, "", "#" + code); } catch (e) { } }
+  else isHost = false, mySlot = null;
+  const inviteUrl = location.origin + location.pathname + "#" + code;
+  const TOPIC = "orbduell/v2/" + code;
+  const peers = new Map();
+  let clients = [], seq = 0, lastSend = 0, guestMsg = null, copiedUntil = 0, waitingSince = 0, netStart = performance.now(), partner = null, toastT = 0;
   function becomeHost() {
     isHost = true; mySlot = 0; S.p2 = "bot"; lastP2 = null; S.rn++;
     S.ph = "lobby"; S.tl = ROUND; S.s = [0, 0]; S.st = [0, 0]; S.o = []; S.m = []; resetShip(me, 0); resetShip(bot, 1);
   }
-  function wireHostConn(c) {
-    if (conn && conn.open) { c.on("open", () => c.close()); return; }
-    conn = c;
-    c.on("open", () => { if (conn !== c) return; net = "host-on"; failMsg = ""; S.p2 = "guest"; lastP2 = null; guestMsg = null; buzz(30); });
-    c.on("data", d => { if (conn === c && d && typeof d === "object" && d.t === "me") guestMsg = d; });
-    const drop = () => {
-      if (conn !== c) return;
-      conn = null; guestMsg = null; net = "host-wait";
-      if (S.p2 === "guest") { S.p2 = "bot"; bot.x = S.pl[1][0]; bot.y = S.pl[1][1]; }
-    };
-    c.on("close", drop); c.on("error", drop);
+  function linkUp() { return clients.some(c => c.connected); }
+  function onMsg(buf) {
+    let d; try { d = JSON.parse(typeof buf === "string" ? buf : new TextDecoder().decode(buf)); } catch (e) { return; }
+    if (!d || typeof d !== "object" || typeof d.id !== "string" || d.id.length > 20 || d.id === myId) return;
+    const q = num(d.q, 0, 0, 1e12), cur = peers.get(d.id);
+    if (cur && q <= cur.q && q > cur.q - 1000) return; // doppelt über zweiten Server
+    peers.set(d.id, { p: d, seen: performance.now(), q });
   }
-  function startHost() {
-    if (!window.Peer) { net = "fail"; failMsg = failMsg || "Mehrspieler konnte nicht geladen werden. Du spielst gegen den Bot."; return; }
-    const id = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => ALPHA[b % ALPHA.length]).join("");
-    const pr = peer = new Peer(PREFIX + id, { debug: 0 });
-    net = "host-prep";
-    pr.on("open", () => { if (peer !== pr) return; inviteUrl = location.origin + location.pathname + "#" + id; $("link").textContent = inviteUrl; if (net === "host-prep") net = "host-wait"; });
-    pr.on("connection", c => { if (peer === pr) wireHostConn(c); });
-    pr.on("disconnected", () => { if (peer === pr && !pr.destroyed) { try { pr.reconnect(); } catch (e) { } } });
-    pr.on("error", e => {
-      if (peer !== pr) return;
-      if (e && e.type === "unavailable-id") { pr.destroy(); startHost(); }
-      else if (net === "host-prep") { net = "fail"; failMsg = "Kein Kontakt zum Spielserver. Du spielst erstmal gegen den Bot. Lade die Seite neu, um es nochmal zu versuchen."; }
+  function connectAll() {
+    if (!window.mqtt) return;
+    BROKERS.forEach((url, i) => {
+      let c;
+      try { c = mqtt.connect(url, { clientId: "od_" + myId + i, clean: true, reconnectPeriod: 2000, connectTimeout: 8000, keepalive: 20 }); } catch (e) { return; }
+      c.on("connect", () => { c.subscribe(TOPIC, { qos: 0 }); lastSend = -1; });
+      c.on("message", (t, m) => { if (t === TOPIC) onMsg(m); });
+      c.on("error", () => { });
+      clients.push(c);
     });
   }
-  function guestFail(msg) {
-    if (isHost) return;
-    failMsg = msg; const old = peer; peer = null; conn = null;
-    try { old && old.destroy(); } catch (e) { }
-    try { history.replaceState(null, "", location.pathname); } catch (e) { }
-    becomeHost(); startHost();
+  function roles() {
+    const t = performance.now();
+    for (const [id, v] of peers) if (t - v.seen > 5000) peers.delete(id);
+    const others = [...peers.entries()].map(([id, v]) => ({ id, p: v.p }));
+    const hosts = others.filter(o => o.p.h === 1).map(o => o.id).sort();
+    if (isHost) {
+      if (hosts.length && hosts[0] < myId) { isHost = false; mySlot = null; }
+    } else if (!hosts.length) {
+      if (!waitingSince) waitingSince = t;
+      if (t - waitingSince > 2500 || !linkUp() && t - netStart > 8000) {
+        const ids = [myId, ...others.map(o => o.id)].sort();
+        if (ids[0] === myId || !linkUp()) { waitingSince = 0; becomeHost(); }
+      }
+    } else waitingSince = 0;
+    if (isHost) {
+      mySlot = 0;
+      const cands = others.filter(o => o.p.h !== 1).map(o => o.id).sort();
+      if (S.p2 !== "bot" && !cands.includes(S.p2)) { S.p2 = "bot"; bot.x = S.pl[1][0]; bot.y = S.pl[1][1]; }
+      if (S.p2 === "bot" && cands.length) S.p2 = cands[0];
+      guestMsg = S.p2 !== "bot" ? peers.get(S.p2).p : null;
+    } else if (hosts.length) {
+      const h = peers.get(hosts[0]);
+      unpackState(h.p.st);
+      const slot = S.p2 === myId ? 1 : null;
+      if (slot === 1 && mySlot !== 1) resetShip(me, 1);
+      mySlot = slot;
+    }
+    // wer ist mein Gegenüber? Für "ist da" / "ist weg"
+    let np = null;
+    if (isHost && S.p2 !== "bot") np = S.p2;
+    else if (!isHost && mySlot === 1 && hosts.length) np = hosts[0];
+    if (np !== partner) {
+      if (np) { const nm = cleanName(peers.get(np).p.n, "Dein Kumpel"); toast(`${nm} ist da!`, false); sfx.join(); buzz([40, 60, 40]); }
+      else if (partner) { toast("Dein Kumpel ist weg", true); sfx.far(); }
+      partner = np;
+    }
   }
-  function startGuest() {
-    isHost = false; mySlot = 1; net = "guest-wait"; resetShip(me, 1);
-    if (!window.Peer) { guestFail("Mehrspieler konnte nicht geladen werden. Du spielst gegen den Bot."); return; }
-    const pr = peer = new Peer({ debug: 0 });
-    pr.on("open", () => {
-      if (peer !== pr) return;
-      const c = conn = pr.connect(PREFIX + code, { serialization: "json", reliable: true });
-      c.on("open", () => { if (conn === c) { net = "guest-on"; buzz(30); } });
-      c.on("data", d => { if (conn === c && d && typeof d === "object" && d.t === "st") unpackState(d.st); });
-      c.on("close", () => { if (conn === c) guestFail("Die Verbindung zu deinem Kumpel ist abgebrochen. Du spielst jetzt gegen den Bot."); });
-    });
-    pr.on("error", e => {
-      if (peer !== pr) return;
-      guestFail(e && e.type === "peer-unavailable" ? "Dieses Spiel ist nicht mehr offen. Lass dir einen neuen Link schicken." : "Keine Verbindung möglich. Du spielst erstmal gegen den Bot.");
-    });
-    setTimeout(() => { if (peer === pr && net === "guest-wait") guestFail("Keine Verbindung zustande gekommen. Lass dir einen neuen Link schicken."); }, 20000);
+  function toast(msg, bad) {
+    const el = $("toast"); el.textContent = msg; el.classList.toggle("bad", !!bad);
+    el.hidden = true; void el.offsetWidth; el.hidden = false; toastT = 2.6;
   }
   function netSend() {
-    if (!conn || !conn.open || now - lastSend < 1 / 30) return;
+    if (!linkUp() || now - lastSend < 1 / 15) return;
     lastSend = now;
-    try {
-      if (isHost) conn.send({ t: "st", st: packState() });
-      else conn.send({ t: "me", x: Math.round(me.x), y: Math.round(me.y), a: Math.round(me.a * 100) / 100, n: myName, go: goCount });
-    } catch (e) { }
+    const d = { id: myId, q: ++seq, n: myName || null, h: isHost ? 1 : 0, x: Math.round(me.x), y: Math.round(me.y), a: Math.round(me.a * 100) / 100, go: goCount };
+    if (isHost) d.st = packState();
+    const txt = JSON.stringify(d);
+    for (const c of clients) if (c.connected) { try { c.publish(TOPIC, txt, { qos: 0 }); } catch (e) { } }
   }
 
   // ---------- input ----------
@@ -392,10 +437,15 @@
   $("go").addEventListener("click", () => {
     audio();
     try { navigator.wakeLock && navigator.wakeLock.request("screen").catch(() => { }); } catch (e) { }
-    if (isHost) startRound(); else { goCount++; lastSend = -1; netSend(); }
+    if (isHost) startRound(); else if (mySlot === 1) { goCount++; lastSend = -1; netSend(); }
+  });
+  $("joinform").addEventListener("submit", e => {
+    e.preventDefault();
+    const c = $("joincode").value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (c.length < 4 || c === code) { $("joincode").focus(); return; }
+    location.hash = c; location.reload();
   });
   $("share").addEventListener("click", async () => {
-    if (!inviteUrl) return;
     const data = { title: "Orb Duell", text: "Orb Duell gegen mich? Antippen und los:", url: inviteUrl };
     if (navigator.share) { try { await navigator.share(data); return; } catch (e) { if (e && e.name === "AbortError") return; } }
     try { await navigator.clipboard.writeText(inviteUrl); copiedUntil = now + 2; }
@@ -467,20 +517,29 @@
       setText("kicker", "Runde vorbei");
     } else setText("kicker", "Echtzeit-Duell für zwei Handys");
     let st, cls;
-    if (net === "guest-wait") { st = "Verbinde mit deinem Kumpel…"; cls = "wait"; }
-    else if (net === "guest-on") { st = `Verbunden mit ${S.n[0]}. Einer von euch drückt Start.`; cls = "on"; }
-    else if (net === "host-on") { st = `${S.n[1]} ist verbunden und fliegt gegen dich.`; cls = "on"; }
-    else if (failMsg) { st = failMsg; cls = ""; }
-    else if (net === "host-wait") { st = "Schick deinem Kumpel den Link. Bis er da ist, spielst du gegen den Bot."; cls = "wait"; }
-    else { st = "Einladungslink wird vorbereitet…"; cls = "wait"; }
+    const up = linkUp(), noNet = !window.mqtt || (!up && performance.now() - netStart > 8000);
+    let ct, ccl;
+    if (noNet) { st = "Keine Verbindung zum Spielserver. Du spielst gegen den Bot. Prüf dein Internet und lade die Seite neu."; cls = ""; ct = "Offline"; ccl = ""; }
+    else if (!up) { st = "Verbinde mit dem Spielserver…"; cls = "wait"; ct = "Verbinde"; ccl = "wait"; }
+    else if (partner && isHost) { st = `${S.n[1]} ist da und fliegt gegen dich. Drück Start!`; cls = "on"; ct = `${S.n[1]} online`; ccl = "on"; }
+    else if (partner) { st = `Verbunden mit ${S.n[0]}. Einer von euch drückt Start.`; cls = "on"; ct = `${S.n[0]} online`; ccl = "on"; }
+    else if (isHost) { st = "Warte auf deinen Kumpel. Schick ihm den Link oder deinen Raum-Code. Bis dahin spielst du gegen den Bot."; cls = "wait"; ct = "Allein"; ccl = "wait"; }
+    else if (mySlot === null && peers.size && S.p2 !== "bot") { st = `${S.n[0]} und ${S.n[1]} spielen gerade. Du schaust zu.`; cls = "on"; ct = "Zuschauer"; ccl = "on"; }
+    else { st = `Suche deinen Kumpel in Raum ${code}…`; cls = "wait"; ct = "Suche"; ccl = "wait"; }
+    setText("conntext", ct); setCls("conn", "on", ccl === "on"); setCls("conn", "wait", ccl === "wait");
     setText("statustext", st);
     setCls("status", "on", cls === "on"); setCls("status", "wait", cls === "wait");
     const btn = S.ph === "end" ? "Nochmal" : "Runde starten";
-    setText("go", net === "guest-wait" ? "Verbinde…" : btn);
-    $("go").disabled = net === "guest-wait";
-    const inv = isHost && net === "host-wait" && !!inviteUrl;
+    const waitingGuest = !isHost && mySlot === null;
+    setText("go", waitingGuest ? (partner || S.p2 !== "bot" && peers.size ? "Zuschauen" : "Suche…") : btn);
+    $("go").disabled = waitingGuest;
+    const inv = isHost && S.p2 === "bot" && !noNet;
     if ($("invite").hidden === inv) $("invite").hidden = !inv;
+    const jf = !partner && !noNet;
+    if ($("joinform").hidden === jf) $("joinform").hidden = !jf;
+    setText("roomcode", code); setText("link", inviteUrl);
     setText("share", copiedUntil > now ? "Link kopiert!" : "Kumpel einladen");
+    if (toastT > 0 && (toastT -= 1 / 60) <= 0) $("toast").hidden = true;
   }
   const youStyle = document.createElement("style");
   youStyle.textContent = '.name[data-you="true"]::after{content:"DU";font-size:9px;letter-spacing:.14em;padding:1px 4px;margin-left:6px;border:1px solid currentColor;border-radius:3px;color:var(--ink)}';
@@ -632,13 +691,14 @@
     }
     diffFx();
     shake *= Math.pow(.86, dt * 60); flash = Math.max(0, flash - dt); losT = Math.max(0, losT - dt);
+    roles();
     netSend();
     ui();
     render(dt);
     requestAnimationFrame(frame);
   }
   resize();
-  if (code) startGuest(); else startHost();
+  connectAll();
   requestAnimationFrame(frame);
 })();
 </script>
