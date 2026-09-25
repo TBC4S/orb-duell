@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0B0620">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta property="og:title" content="Orb Duell">
-<meta property="og:description" content="Neon-Duell fürs Handy. Antippen und gegen mich antreten!">
+<meta property="og:description" content="Neon-Duell fürs Handy für bis zu 4 Spieler. Antippen und mitspielen!">
 <title>Orb Duell</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Rubik:wght@400;500&display=swap">
@@ -20,6 +20,7 @@
     --line: rgba(160, 140, 255, 0.22);
     --p1: #57E1FF;
     --p2: #FF6FB1;
+    --ok: #6BFFB0;
     --gold: #FFD66B;
     --mine: #FF4A3D;
     --disp: "Chakra Petch", "Trebuchet MS", system-ui, sans-serif;
@@ -27,72 +28,79 @@
   }
   *, *::before, *::after { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html, body { margin: 0; -webkit-tap-highlight-color: transparent; }
-  #invite { display: flex; flex-direction: column; gap: 8px; }
-  .ghost { font: 700 15px var(--disp); letter-spacing: .12em; text-transform: uppercase; color: var(--p1); background: rgba(87, 225, 255, .08); border: 1px solid var(--p1); border-radius: 10px; padding: 12px; cursor: pointer; }
-  .ghost:active { transform: scale(.98); }
-  .mid { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  .conn { display: flex; align-items: center; gap: 6px; font: 600 10px var(--disp); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding: 3px 8px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
-  .conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-  .conn.on { color: #6BFFB0; border-color: rgba(107, 255, 176, .45); }
-  .conn.on i { background: #6BFFB0; box-shadow: 0 0 8px #6BFFB0; }
-  .conn.wait i { background: var(--gold); animation: blink 1s steps(2) infinite; }
-  #toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 96px); transform: translateX(-50%); z-index: 4; max-width: calc(100% - 32px);
-    font: 700 20px var(--disp); letter-spacing: .04em; text-align: center; padding: 12px 20px; border-radius: 12px; color: #0B0620;
-    background: linear-gradient(90deg, #6BFFB0, var(--p1)); box-shadow: 0 0 36px rgba(107, 255, 176, .5); animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); pointer-events: none; }
-  #toast.bad { background: linear-gradient(90deg, var(--mine), var(--p2)); box-shadow: 0 0 36px rgba(255, 74, 61, .45); color: #fff; }
-  @keyframes pop { from { transform: translateX(-50%) scale(.6); opacity: 0; } }
-  .room { text-align: center; font: 600 12px var(--disp); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
-  .room b { display: block; font-size: 30px; letter-spacing: .3em; color: var(--ink); margin-top: 2px; text-transform: none; }
-  .join { display: flex; flex-direction: column; gap: 6px; margin: 0; }
-  .joinrow { display: flex; gap: 8px; }
-  .joinrow input { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .2em; }
-  .joinrow .ghost { padding: 10px 14px; font-size: 13px; }
-  .link { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; user-select: text; -webkit-user-select: text; text-align: center; }
-  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); -webkit-tap-highlight-color: transparent; }
   body { font-family: var(--body); touch-action: none; user-select: none; -webkit-user-select: none; }
   #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
+  /* ---------- HUD ---------- */
   #hud {
     position: fixed; left: 0; right: 0; top: 0;
     padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 0;
-    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 10px;
     pointer-events: none; z-index: 2;
   }
-  .chip { display: flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--disp); }
-  .chip.right { justify-content: flex-end; text-align: right; }
-  .chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 10px currentColor; background: currentColor; }
+  .side { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .side.right { align-items: flex-end; }
+  .chip { display: flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--disp); color: var(--c); }
+  .side.right .chip { flex-direction: row-reverse; text-align: right; }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--c); box-shadow: 0 0 10px var(--c); }
   .chip .meta { display: flex; flex-direction: column; min-width: 0; line-height: 1.05; }
+  .side.right .chip .meta { align-items: flex-end; }
   .chip .name { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; }
   .chip .score { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .chip.a { color: var(--p1); }
-  .chip.b { color: var(--p2); }
-  .chip .you { font-size: 9px; letter-spacing: .14em; padding: 1px 5px; border: 1px solid currentColor; border-radius: 3px; margin-left: 4px; vertical-align: 2px; }
+  #hud.four .chip .score { font-size: 20px; }
+  #hud.four .chip .name { font-size: 10px; }
+  .name[data-you="true"]::after { content: "DU"; font-size: 9px; letter-spacing: .14em; padding: 1px 4px; margin-left: 6px; border: 1px solid currentColor; border-radius: 3px; color: var(--ink); }
+  .mid { display: flex; flex-direction: column; align-items: center; gap: 6px; }
   #timer { font-family: var(--disp); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
   #timer.hot { color: var(--mine); border-color: rgba(255, 74, 61, .6); animation: pulse .5s ease-in-out infinite alternate; }
   @keyframes pulse { to { transform: scale(1.08); } }
+  .conn { display: flex; align-items: center; gap: 6px; font: 600 10px var(--disp); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding: 3px 8px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
+  .conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .conn.on { color: var(--ok); border-color: rgba(107, 255, 176, .45); }
+  .conn.on i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .conn.wait i { background: var(--gold); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
 
+  #toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 100px); transform: translateX(-50%); z-index: 4; max-width: calc(100% - 32px);
+    font: 700 20px var(--disp); letter-spacing: .04em; text-align: center; padding: 12px 20px; border-radius: 12px; color: #0B0620;
+    background: linear-gradient(90deg, var(--ok), var(--p1)); box-shadow: 0 0 36px rgba(107, 255, 176, .5); animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); pointer-events: none; }
+  #toast.bad { background: linear-gradient(90deg, var(--mine), var(--p2)); box-shadow: 0 0 36px rgba(255, 74, 61, .45); color: #fff; }
+  @keyframes pop { from { transform: translateX(-50%) scale(.6); opacity: 0; } }
+
+  /* ---------- Lobby ---------- */
   #overlay {
-    position: fixed; inset: 0; z-index: 3; display: grid; place-items: center;
+    position: fixed; inset: 0; z-index: 3; display: flex; overflow-y: auto; touch-action: pan-y;
     padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
-    background: radial-gradient(ellipse at 50% 40%, rgba(11, 6, 32, .35), rgba(11, 6, 32, .82));
+    background: radial-gradient(ellipse at 50% 40%, rgba(11, 6, 32, .45), rgba(11, 6, 32, .88));
   }
   .card {
-    width: min(100%, 380px); display: flex; flex-direction: column; gap: 16px;
-    padding: 24px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+    width: min(100%, 380px); margin: auto; display: flex; flex-direction: column; gap: 14px;
+    padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
     backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   }
-  .logo { font-family: var(--disp); font-weight: 700; font-size: clamp(44px, 14vw, 60px); line-height: .9; letter-spacing: .02em; text-wrap: balance; margin: 0; }
+  .logo { font-family: var(--disp); font-weight: 700; font-size: clamp(38px, 12vw, 52px); line-height: .9; letter-spacing: .02em; margin: 0; }
   .logo span:first-child { color: var(--p1); text-shadow: 0 0 24px rgba(87, 225, 255, .55); }
   .logo span:last-child { color: var(--p2); text-shadow: 0 0 24px rgba(255, 111, 177, .55); }
-  .kicker { font-family: var(--disp); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  .kicker, .label { font-family: var(--disp); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
   #result { font-family: var(--disp); font-size: 22px; font-weight: 700; margin: 0; }
-  #finals { font-family: var(--disp); font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #finals { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; font-family: var(--disp); font-size: 15px; font-variant-numeric: tabular-nums; }
+  #finals li { display: flex; justify-content: space-between; gap: 10px; color: var(--c); }
+  #finals li span:first-child { color: var(--ink); }
   #status { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); }
   #status .led { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--muted); }
-  #status.on .led { background: #6BFFB0; box-shadow: 0 0 10px #6BFFB0; }
+  #status.on .led { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
   #status.wait .led { background: var(--gold); animation: blink 1s steps(2) infinite; }
-  @keyframes blink { 50% { opacity: .2; } }
+  .lobby { display: flex; flex-direction: column; gap: 6px; }
+  #players { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  #players li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); font-size: 15px; }
+  #players li .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--c); box-shadow: 0 0 10px var(--c); }
+  #players li .pn { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #players li .tag { font: 600 10px var(--disp); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px; }
+  #players li.free { border-style: dashed; color: var(--muted); background: none; }
+  #players li.free .dot { background: none; box-shadow: none; border: 1px dashed var(--muted); }
+  #players li.new { animation: glowin 1.2s ease-out; }
+  @keyframes glowin { from { background: rgba(107, 255, 176, .25); border-color: var(--ok); } }
   label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-family: var(--disp); }
   input {
     font: 500 16px var(--body); color: var(--ink); background: rgba(0, 0, 0, .3);
@@ -106,12 +114,22 @@
     box-shadow: 0 0 28px rgba(255, 111, 177, .35);
   }
   #go:active { transform: scale(.98); }
-  #go:disabled { opacity: .45; cursor: default; }
-  .rules { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 13px; color: var(--muted); line-height: 1.35; margin: 0; }
+  #go:disabled { cursor: default; color: var(--ink); background: rgba(255, 255, 255, .06); box-shadow: none; border: 1px dashed var(--line); font-size: 14px; }
+  .ghost { font: 700 15px var(--disp); letter-spacing: .12em; text-transform: uppercase; color: var(--p1); background: rgba(87, 225, 255, .08); border: 1px solid var(--p1); border-radius: 10px; padding: 12px; cursor: pointer; }
+  .ghost:active { transform: scale(.98); }
+  #invite { display: flex; flex-direction: column; gap: 8px; }
+  .room { display: flex; justify-content: space-between; align-items: baseline; font: 600 11px var(--disp); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .room b { font-size: 24px; letter-spacing: .25em; color: var(--ink); text-transform: none; }
+  .link { font: 11px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; user-select: text; -webkit-user-select: text; text-align: center; }
+  .join { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+  .joinrow { display: flex; gap: 8px; }
+  .joinrow input { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .2em; }
+  .joinrow .ghost { padding: 10px 14px; font-size: 13px; }
+  .rules { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 13px; color: var(--muted); line-height: 1.35; margin: 0; }
   .rules dt { font-family: var(--disp); font-weight: 700; color: var(--ink); }
-  .rules .o { color: var(--p1); } .rules .g { color: var(--gold); } .rules .m { color: var(--mine); }
-  .hint { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 0; }
-  @media (prefers-reduced-motion: reduce) { #timer.hot, #status.wait .led { animation: none; } }
+  .rules dd { margin: 0; }
+  .rules .o { color: #B9A6FF; } .rules .g { color: var(--gold); } .rules .m { color: var(--mine); }
+  @media (prefers-reduced-motion: reduce) { #timer.hot, #status.wait .led, .conn.wait i, #toast, #players li.new { animation: none; } }
 </style>
 </head>
 <body>
@@ -119,9 +137,9 @@
 <canvas id="c" aria-label="Spielfeld"></canvas>
 
 <div id="hud">
-  <div class="chip a"><span class="dot"></span><div class="meta"><span class="name" id="n0">Spieler 1</span><span class="score" id="s0">0</span></div></div>
+  <div class="side" id="hudL"></div>
   <div class="mid"><div id="timer">60</div><div id="conn" class="conn"><i></i><span id="conntext">Verbinde</span></div></div>
-  <div class="chip b right"><div class="meta"><span class="name" id="n1">Bot</span><span class="score" id="s1">0</span></div><span class="dot"></span></div>
+  <div class="side right" id="hudR"></div>
 </div>
 
 <div id="toast" hidden></div>
@@ -129,33 +147,37 @@
 <div id="overlay">
   <div class="card">
     <div>
-      <div class="kicker" id="kicker">Echtzeit-Duell für zwei Handys</div>
-      <h1 class="logo"><span>ORB</span><br><span>DUELL</span></h1>
+      <div class="kicker" id="kicker">Neon-Duell für bis zu 4 Handys</div>
+      <h1 class="logo"><span>ORB</span> <span>DUELL</span></h1>
     </div>
     <div id="endbox" hidden>
       <p id="result">Du gewinnst!</p>
-      <div id="finals">12 : 9</div>
+      <ol id="finals"></ol>
     </div>
     <div id="status" class="wait"><span class="led"></span><span id="statustext">Verbinde…</span></div>
+    <div class="lobby">
+      <div class="label">Lobby</div>
+      <ul id="players"></ul>
+    </div>
+    <button id="go" type="button">Runde starten</button>
     <label for="nick">Dein Name
       <input id="nick" maxlength="14" autocomplete="off" placeholder="z. B. Thorben">
     </label>
-    <button id="go" type="button">Runde starten</button>
+    <div id="invite" hidden>
+      <div class="room">Raum-Code <b id="roomcode">-----</b></div>
+      <button id="share" type="button" class="ghost">Kumpels einladen</button>
+      <div class="link" id="link"></div>
+    </div>
+    <form id="joinform" class="join">
+      <label for="joincode">Code von einem Kumpel</label>
+      <div class="joinrow"><input id="joincode" maxlength="8" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="z. B. k7px2"><button type="submit" class="ghost">Beitreten</button></div>
+    </form>
     <dl class="rules">
       <dt>Steuern</dt><dd>Finger aufs Feld, dein Schiff fliegt hinterher.</dd>
       <dt class="o">Orb</dt><dd>+1 Punkt</dd>
       <dt class="g">Gold</dt><dd>+5 Punkte</dd>
       <dt class="m">Mine</dt><dd>−3 Punkte und kurz gelähmt</dd>
     </dl>
-    <div id="invite" hidden>
-      <div class="room">Dein Raum <b id="roomcode">-----</b></div>
-      <button id="share" type="button" class="ghost">Kumpel einladen</button>
-      <div class="link" id="link"></div>
-    </div>
-    <form id="joinform" class="join">
-      <label for="joincode">Code vom Kumpel</label>
-      <div class="joinrow"><input id="joincode" maxlength="8" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="z. B. k7px2"><button type="submit" class="ghost">Beitreten</button></div>
-    </form>
   </div>
 </div>
 
@@ -163,14 +185,15 @@
 <script>
 (() => {
   "use strict";
-  const W = 900, H = 1500, ROUND = 60000, SHIP_R = 34, ORB_R = 28, MINE_R = 30;
-  const COL = ["#57E1FF", "#FF6FB1"], GOLD = "#FFD66B", MINE = "#FF4A3D", WHITE = "#F4F0FF";
-  const SPAWN = [[450, 1200], [450, 300]];
+  const W = 900, H = 1500, ROUND = 60000, SHIP_R = 34, ORB_R = 28, MINE_R = 30, MAXP = 4;
+  const COL = ["#57E1FF", "#FF6FB1", "#8CFF7A", "#FFA24C"], GOLD = "#FFD66B", MINE = "#FF4A3D", WHITE = "#F4F0FF";
+  const SPAWN = [[450, 1250, -Math.PI / 2], [450, 250, Math.PI / 2], [150, 750, 0], [750, 750, Math.PI]];
   const FAM = "'Chakra Petch', 'Trebuchet MS', sans-serif";
   const $ = (id) => document.getElementById(id);
   const cv = $("c"), ctx = cv.getContext("2d");
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const num = (v, d, a, b) => (typeof v === "number" && isFinite(v)) ? clamp(v, a, b) : d;
+  const cleanName = (v, d) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, "").trim().slice(0, 14) : "") || d;
 
   // ---------- sprites ----------
   function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
@@ -180,9 +203,17 @@
     gr.addColorStop(0, rgba(hex, 1)); gr.addColorStop(.18, rgba(hex, .6)); gr.addColorStop(.45, rgba(hex, .16)); gr.addColorStop(1, rgba(hex, 0));
     g.fillStyle = gr; g.fillRect(0, 0, r * 2, r * 2); return c;
   }
-  const SPR = { p0: glow(COL[0]), p1: glow(COL[1]), gold: glow(GOLD), mine: glow(MINE), white: glow(WHITE), violet: glow("#8B6BFF") };
-  const pspr = (i) => i === 0 ? SPR.p0 : SPR.p1;
+  const PSPR = COL.map(c => glow(c));
+  const SPR = { gold: glow(GOLD), mine: glow(MINE), white: glow(WHITE), violet: glow("#8B6BFF") };
   function spr(s, x, y, r, a = 1) { ctx.globalAlpha = a; ctx.drawImage(s, x - r, y - r, r * 2, r * 2); }
+
+  // ---------- HUD-Chips ----------
+  const chips = COL.map((c, i) => {
+    const el = document.createElement("div"); el.className = "chip"; el.style.setProperty("--c", c); el.hidden = true;
+    el.innerHTML = `<span class="dot"></span><div class="meta"><span class="name"></span><span class="score">0</span></div>`;
+    (i % 2 ? $("hudR") : $("hudL")).appendChild(el);
+    return { el, name: el.querySelector(".name"), score: el.querySelector(".score") };
+  });
 
   // ---------- canvas sizing ----------
   let dpr = 1, vw = 0, vh = 0, sc = 1, ox = 0, oy = 0, nebula = null;
@@ -227,21 +258,23 @@
   function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { } }
 
   // ---------- state ----------
-  const S = { ph: "lobby", tl: ROUND, cd: 0, s: [0, 0], o: [], m: [], st: [0, 0], pl: [[...SPAWN[0], -157], [...SPAWN[1], 157]], rn: 0, p2: "bot", n: ["Spieler 1", "Bot"] };
-  let isHost = true, mySlot = 0, hostPeer = null;
-  let orbId = 1, goCount = 0, lastGo = -1, lastP2 = null;
-  const me = { x: SPAWN[0][0], y: SPAWN[0][1], vx: 0, vy: 0, a: -Math.PI / 2, tx: SPAWN[0][0], ty: SPAWN[0][1] };
-  const bot = { x: SPAWN[1][0], y: SPAWN[1][1], vx: 0, vy: 0, a: Math.PI / 2, tx: SPAWN[1][0], ty: SPAWN[1][1], think: 0 };
-  const disp = [{ x: SPAWN[0][0], y: SPAWN[0][1], a: 0 }, { x: SPAWN[1][0], y: SPAWN[1][1], a: 0 }];
-  const trails = [[], []];
+  // ids[i]: wer fliegt Schiff i (Peer-Id, "bot" oder null). Slot 0 ist immer der Host.
+  const S = { ph: "lobby", tl: ROUND, cd: 0, rn: 0, ids: [null, "bot", null, null], n: ["Spieler 1", "Bot", "", ""], s: [0, 0, 0, 0], st: [0, 0, 0, 0], pl: SPAWN.map(p => p.slice()), o: [], m: [] };
+  let isHost = true, mySlot = 0;
+  let orbId = 1;
+  const mkShip = i => ({ x: SPAWN[i][0], y: SPAWN[i][1], vx: 0, vy: 0, a: SPAWN[i][2], tx: SPAWN[i][0], ty: SPAWN[i][1] });
+  const me = mkShip(0);
+  const bot = Object.assign(mkShip(1), { think: 0 });
+  const disp = SPAWN.map(p => ({ x: p[0], y: p[1], a: p[2] }));
+  const trails = [[], [], [], []];
   let dispM = [];
   const born = new Map();
   let parts = [], texts = [], rings = [], shake = 0, flash = 0, losT = 0, now = 0;
+  const active = i => !!S.ids[i];
 
   let myName = "";
   try { myName = localStorage.getItem("orbduell.name") || ""; } catch (e) { }
   $("nick").value = myName;
-  const cleanName = (v, d) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, "").trim().slice(0, 14) : "") || d;
   $("nick").addEventListener("input", () => { myName = cleanName($("nick").value, ""); try { localStorage.setItem("orbduell.name", myName); } catch (e) { } });
 
   // ---------- ship physics ----------
@@ -252,26 +285,29 @@
     s.x = clamp(s.x + s.vx * dt, 40, W - 40); s.y = clamp(s.y + s.vy * dt, 40, H - 40);
     if (Math.hypot(s.vx, s.vy) > 40) s.a = Math.atan2(s.vy, s.vx);
   }
-  function resetShip(s, i) { s.x = s.tx = SPAWN[i][0]; s.y = s.ty = SPAWN[i][1]; s.vx = s.vy = 0; s.a = i ? Math.PI / 2 : -Math.PI / 2; }
+  function resetShip(s, i) { s.x = s.tx = SPAWN[i][0]; s.y = s.ty = SPAWN[i][1]; s.vx = s.vy = 0; s.a = SPAWN[i][2]; }
 
   // ---------- host simulation ----------
   function makeMine() {
     const ang = Math.random() * Math.PI * 2, v = 170 + Math.random() * 90;
-    return { x: 120 + Math.random() * (W - 240), y: 560 + Math.random() * 380, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v };
+    return { x: 250 + Math.random() * (W - 500), y: 560 + Math.random() * 380, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v };
   }
   function spawnOrb() {
     for (let tries = 0; tries < 20; tries++) {
       const x = 70 + Math.random() * (W - 140), y = 90 + Math.random() * (H - 180);
-      if (S.pl.some(p => Math.hypot(p[0] - x, p[1] - y) < 170)) continue;
+      if (S.pl.some((p, i) => active(i) && Math.hypot(p[0] - x, p[1] - y) < 170)) continue;
       if (S.o.some(o => Math.hypot(o.x - x, o.y - y) < 110)) continue;
       S.o.push({ id: orbId++, x, y, k: Math.random() < .12 ? 1 : 0 }); return;
     }
   }
+  const players = () => S.ids.filter(Boolean).length;
   function startRound() {
-    S.ph = "cd"; S.cd = 3000; S.tl = ROUND; S.s = [0, 0]; S.st = [0, 0]; S.o = []; S.rn++;
-    S.m = [makeMine(), makeMine(), makeMine()];
+    const np = players();
+    S.ph = "cd"; S.cd = 3000; S.tl = ROUND; S.s = [0, 0, 0, 0]; S.st = [0, 0, 0, 0]; S.o = []; S.rn++;
+    S.m = Array.from({ length: np > 2 ? 4 : 3 }, makeMine);
     resetShip(me, 0); resetShip(bot, 1);
-    for (let i = 0; i < 7; i++) spawnOrb();
+    S.pl = SPAWN.map(p => p.slice());
+    for (let i = 0; i < 5 + np; i++) spawnOrb();
   }
   function botStep(dt) {
     bot.think -= dt;
@@ -287,44 +323,45 @@
   }
   function hostStep(dt) {
     const ms = dt * 1000;
-    S.pl[0] = [me.x, me.y, me.a];
-    if (S.p2 === "bot") { if (S.ph === "cd" || S.ph === "play") botStep(dt); S.pl[1] = [bot.x, bot.y, bot.a]; }
-    else if (S.p2 !== "bot") {
-      const pr = guestMsg;
-      if (pr) {
-        S.pl[1] = [num(pr.x, S.pl[1][0], 0, W), num(pr.y, S.pl[1][1], 0, H), num(pr.a, 0, -7, 7)];
-        S.n[1] = cleanName(pr.n, "Kumpel");
-        const go = num(pr.go, 0, 0, 1e9);
-        if (lastP2 !== S.p2) { lastP2 = S.p2; lastGo = go; }
-        if (go > lastGo) { lastGo = go; if (S.ph === "lobby" || S.ph === "end") startRound(); }
-      }
+    S.pl[0] = [me.x, me.y, me.a]; S.n[0] = myName || "Spieler 1";
+    for (let i = 1; i < MAXP; i++) {
+      const id = S.ids[i];
+      if (id === "bot") { if (S.ph === "cd" || S.ph === "play") botStep(dt); S.pl[i] = [bot.x, bot.y, bot.a]; S.n[i] = "Bot"; }
+      else if (id) {
+        const pv = peers.get(id);
+        if (pv) {
+          const pr = pv.p;
+          S.pl[i] = [num(pr.x, S.pl[i][0], 0, W), num(pr.y, S.pl[i][1], 0, H), num(pr.a, 0, -7, 7)];
+          S.n[i] = cleanName(pr.n, "Spieler " + (i + 1));
+        }
+      } else S.n[i] = "";
     }
-    if (S.p2 === "bot") S.n[1] = "Bot";
-    S.n[0] = myName || "Spieler 1";
     if (S.ph === "cd") { S.cd -= ms; if (S.cd <= 0) { S.cd = 0; S.ph = "play"; } }
     else if (S.ph === "play") {
       S.tl -= ms;
       S.st = S.st.map(v => Math.max(0, v - ms));
-      const want = S.tl < 15000 ? 5 : S.tl < 35000 ? 4 : 3;
+      const extra = players() > 2 ? 1 : 0;
+      const want = (S.tl < 15000 ? 5 : S.tl < 35000 ? 4 : 3) + extra;
       while (S.m.length < want) S.m.push(makeMine());
       for (const m of S.m) {
         m.x += m.vx * dt; m.y += m.vy * dt;
         if (m.x < 50 || m.x > W - 50) { m.vx *= -1; m.x = clamp(m.x, 50, W - 50); }
         if (m.y < 50 || m.y > H - 50) { m.vy *= -1; m.y = clamp(m.y, 50, H - 50); }
       }
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < MAXP; i++) {
+        if (!active(i)) continue;
         const [px, py] = S.pl[i];
         S.o = S.o.filter(o => { if (Math.hypot(o.x - px, o.y - py) < SHIP_R + ORB_R + (o.k ? 6 : 0)) { S.s[i] += o.k ? 5 : 1; return false; } return true; });
         if (S.st[i] <= 0) for (const m of S.m) if (Math.hypot(m.x - px, m.y - py) < SHIP_R + MINE_R - 6) { S.s[i] = Math.max(0, S.s[i] - 3); S.st[i] = 1400; break; }
       }
-      while (S.o.length < 7) spawnOrb();
+      while (S.o.length < 5 + players()) spawnOrb();
       if (S.tl <= 0) { S.tl = 0; S.ph = "end"; }
     }
   }
   function packState() {
     const r = Math.round;
     return {
-      ph: S.ph, tl: r(S.tl), cd: r(S.cd), s: S.s, rn: S.rn, p2: S.p2, n: S.n, st: S.st.map(r),
+      ph: S.ph, tl: r(S.tl), cd: r(S.cd), rn: S.rn, ids: S.ids, n: S.n, s: S.s, st: S.st.map(r),
       o: S.o.map(o => [o.id, r(o.x), r(o.y), o.k]), m: S.m.map(m => [r(m.x), r(m.y)]),
       pl: S.pl.map(p => [r(p[0]), r(p[1]), r(p[2] * 100)]),
     };
@@ -334,40 +371,46 @@
     const PH = ["lobby", "cd", "play", "end"];
     S.ph = PH.includes(st.ph) ? st.ph : S.ph;
     S.tl = num(st.tl, S.tl, 0, ROUND); S.cd = num(st.cd, 0, 0, 5000); S.rn = num(st.rn, S.rn, 0, 1e9);
-    S.p2 = typeof st.p2 === "string" ? st.p2.slice(0, 64) : "bot";
-    if (Array.isArray(st.s)) S.s = [num(st.s[0], 0, 0, 9999), num(st.s[1], 0, 0, 9999)];
-    if (Array.isArray(st.st)) S.st = [num(st.st[0], 0, 0, 5000), num(st.st[1], 0, 0, 5000)];
-    if (Array.isArray(st.n)) S.n = [cleanName(st.n[0], "Spieler 1"), cleanName(st.n[1], "Kumpel")];
+    const arr4 = (a, f) => Array.isArray(a) ? [0, 1, 2, 3].map(i => f(a[i], i)) : null;
+    S.ids = arr4(st.ids, v => typeof v === "string" && v.length <= 20 ? v : null) || S.ids;
+    S.n = arr4(st.n, (v, i) => cleanName(v, "Spieler " + (i + 1))) || S.n;
+    S.s = arr4(st.s, v => num(v, 0, 0, 9999)) || S.s;
+    S.st = arr4(st.st, v => num(v, 0, 0, 5000)) || S.st;
     if (Array.isArray(st.o)) S.o = st.o.slice(0, 20).filter(Array.isArray).map(o => ({ id: num(o[0], 0, 0, 1e12), x: num(o[1], 0, 0, W), y: num(o[2], 0, 0, H), k: o[3] === 1 ? 1 : 0 }));
     if (Array.isArray(st.m)) S.m = st.m.slice(0, 10).filter(Array.isArray).map(m => ({ x: num(m[0], 0, 0, W), y: num(m[1], 0, 0, H) }));
-    if (Array.isArray(st.pl)) for (let i = 0; i < 2; i++) { const p = st.pl[i]; if (Array.isArray(p)) S.pl[i] = [num(p[0], 450, 0, W), num(p[1], 750, 0, H), num(p[2], 0, -700, 700) / 100]; }
+    const pl = arr4(st.pl, (p, i) => Array.isArray(p) ? [num(p[0], SPAWN[i][0], 0, W), num(p[1], SPAWN[i][1], 0, H), num(p[2], 0, -700, 700) / 100] : S.pl[i]);
+    if (pl) S.pl = pl;
   }
 
   // ---------- netzwerk: Spielraum über öffentliche MQTT-Server ----------
-  // Beide Handys verbinden sich mit denselben Servern und treffen sich im Raum (Code).
+  // Alle Handys verbinden sich mit denselben Servern und treffen sich im Raum (Code).
   // Läuft über den Server, deshalb klappt es auch im Mobilfunknetz und hinter jedem Router.
   const BROKERS = window.ORB_BROKERS || ["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt"];
   const ALPHA = "abcdefghjkmnpqrstuvwxyz23456789";
   const rid = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => ALPHA[b % ALPHA.length]).join("");
   const myId = rid(10);
+  S.ids[0] = myId;
   let code = (location.hash.match(/^#([a-z0-9]{4,8})$/) || [])[1] || null;
   if (!code) { code = rid(5); try { history.replaceState(null, "", "#" + code); } catch (e) { } }
-  else isHost = false, mySlot = null;
+  else { isHost = false; mySlot = null; S.ids = [null, null, null, null]; }
   const inviteUrl = location.origin + location.pathname + "#" + code;
-  const TOPIC = "orbduell/v2/" + code;
+  const TOPIC = "orbduell/v3/" + code;
   const peers = new Map();
-  let clients = [], seq = 0, lastSend = 0, guestMsg = null, copiedUntil = 0, waitingSince = 0, netStart = performance.now(), partner = null, toastT = 0;
+  let clients = [], seq = 0, lastSend = 0, copiedUntil = 0, waitingSince = 0, netStart = performance.now(), toastT = 0, hostId = null;
+  const joinQ = [];
   function becomeHost() {
-    isHost = true; mySlot = 0; S.p2 = "bot"; lastP2 = null; S.rn++;
-    S.ph = "lobby"; S.tl = ROUND; S.s = [0, 0]; S.st = [0, 0]; S.o = []; S.m = []; resetShip(me, 0); resetShip(bot, 1);
+    isHost = true; mySlot = 0; S.rn++;
+    S.ids = [myId, "bot", null, null]; S.ph = "lobby"; S.tl = ROUND; S.s = [0, 0, 0, 0]; S.st = [0, 0, 0, 0]; S.o = []; S.m = [];
+    resetShip(me, 0); resetShip(bot, 1);
   }
   function linkUp() { return clients.some(c => c.connected); }
   function onMsg(buf) {
     let d; try { d = JSON.parse(typeof buf === "string" ? buf : new TextDecoder().decode(buf)); } catch (e) { return; }
     if (!d || typeof d !== "object" || typeof d.id !== "string" || d.id.length > 20 || d.id === myId) return;
     const q = num(d.q, 0, 0, 1e12), cur = peers.get(d.id);
-    if (cur && q <= cur.q && q > cur.q - 1000) return; // doppelt über zweiten Server
-    peers.set(d.id, { p: d, seen: performance.now(), q });
+    if (cur && q <= cur.q && q > cur.q - 1000) return; // doppelt über den zweiten Server
+    if (!cur) joinQ.push(d.id);
+    peers.set(d.id, { p: d, seen: performance.now(), q, name: cleanName(d.n, "Ein Kumpel") });
   }
   function connectAll() {
     if (!window.mqtt) return;
@@ -382,7 +425,11 @@
   }
   function roles() {
     const t = performance.now();
-    for (const [id, v] of peers) if (t - v.seen > 5000) peers.delete(id);
+    for (const [id, v] of peers) if (t - v.seen > 5000) { peers.delete(id); toast(`${v.name} ist weg`, true); sfx.far(); }
+    while (joinQ.length) {
+      const id = joinQ.shift(), v = peers.get(id);
+      if (v) { toast(`${v.name} ist da!`, false); sfx.join(); buzz([40, 60, 40]); }
+    }
     const others = [...peers.entries()].map(([id, v]) => ({ id, p: v.p }));
     const hosts = others.filter(o => o.p.h === 1).map(o => o.id).sort();
     if (isHost) {
@@ -394,28 +441,25 @@
         if (ids[0] === myId || !linkUp()) { waitingSince = 0; becomeHost(); }
       }
     } else waitingSince = 0;
+
     if (isHost) {
-      mySlot = 0;
-      const cands = others.filter(o => o.p.h !== 1).map(o => o.id).sort();
-      if (S.p2 !== "bot" && !cands.includes(S.p2)) { S.p2 = "bot"; bot.x = S.pl[1][0]; bot.y = S.pl[1][1]; }
-      if (S.p2 === "bot" && cands.length) S.p2 = cands[0];
-      guestMsg = S.p2 !== "bot" ? peers.get(S.p2).p : null;
+      hostId = myId; mySlot = 0; S.ids[0] = myId;
+      for (let i = 1; i < MAXP; i++) { const id = S.ids[i]; if (id && id !== "bot" && !peers.has(id)) S.ids[i] = null; }
+      if (S.ph === "lobby" || S.ph === "end") {
+        const taken = new Set(S.ids);
+        const waiting = others.filter(o => o.p.h !== 1 && !taken.has(o.id)).map(o => o.id).sort();
+        if (waiting.length && S.ids[1] === "bot") S.ids[1] = null;
+        for (let i = 1; i < MAXP && waiting.length; i++) if (!S.ids[i]) S.ids[i] = waiting.shift();
+        const humans = S.ids.slice(1).filter(id => id && id !== "bot").length;
+        if (!humans && !S.ids[1]) { S.ids[1] = "bot"; bot.x = S.pl[1][0]; bot.y = S.pl[1][1]; }
+      }
     } else if (hosts.length) {
-      const h = peers.get(hosts[0]);
-      unpackState(h.p.st);
-      const slot = S.p2 === myId ? 1 : null;
-      if (slot === 1 && mySlot !== 1) resetShip(me, 1);
+      hostId = hosts[0];
+      unpackState(peers.get(hostId).p.st);
+      const idx = S.ids.indexOf(myId), slot = idx > 0 ? idx : null;
+      if (slot !== null && slot !== mySlot) resetShip(me, slot);
       mySlot = slot;
-    }
-    // wer ist mein Gegenüber? Für "ist da" / "ist weg"
-    let np = null;
-    if (isHost && S.p2 !== "bot") np = S.p2;
-    else if (!isHost && mySlot === 1 && hosts.length) np = hosts[0];
-    if (np !== partner) {
-      if (np) { const nm = cleanName(peers.get(np).p.n, "Dein Kumpel"); toast(`${nm} ist da!`, false); sfx.join(); buzz([40, 60, 40]); }
-      else if (partner) { toast("Dein Kumpel ist weg", true); sfx.far(); }
-      partner = np;
-    }
+    } else hostId = null;
   }
   function toast(msg, bad) {
     const el = $("toast"); el.textContent = msg; el.classList.toggle("bad", !!bad);
@@ -424,7 +468,7 @@
   function netSend() {
     if (!linkUp() || now - lastSend < 1 / 15) return;
     lastSend = now;
-    const d = { id: myId, q: ++seq, n: myName || null, h: isHost ? 1 : 0, x: Math.round(me.x), y: Math.round(me.y), a: Math.round(me.a * 100) / 100, go: goCount };
+    const d = { id: myId, q: ++seq, n: myName || null, h: isHost ? 1 : 0, x: Math.round(me.x), y: Math.round(me.y), a: Math.round(me.a * 100) / 100 };
     if (isHost) d.st = packState();
     const txt = JSON.stringify(d);
     for (const c of clients) if (c.connected) { try { c.publish(TOPIC, txt, { qos: 0 }); } catch (e) { } }
@@ -434,10 +478,11 @@
   function toWorld(e) { return [clamp((e.clientX - ox) / sc, 40, W - 40), clamp((e.clientY - oy) / sc, 40, H - 40)]; }
   cv.addEventListener("pointerdown", e => { audio(); try { cv.setPointerCapture(e.pointerId); } catch (x) { } [me.tx, me.ty] = toWorld(e); });
   cv.addEventListener("pointermove", e => { if (e.pointerType === "mouse" || e.buttons || e.pressure > 0) [me.tx, me.ty] = toWorld(e); });
+  document.addEventListener("pointerdown", audio, { once: true });
   $("go").addEventListener("click", () => {
     audio();
     try { navigator.wakeLock && navigator.wakeLock.request("screen").catch(() => { }); } catch (e) { }
-    if (isHost) startRound(); else if (mySlot === 1) { goCount++; lastSend = -1; netSend(); }
+    if (isHost) startRound();
   });
   $("joinform").addEventListener("submit", e => {
     e.preventDefault();
@@ -446,7 +491,7 @@
     location.hash = c; location.reload();
   });
   $("share").addEventListener("click", async () => {
-    const data = { title: "Orb Duell", text: "Orb Duell gegen mich? Antippen und los:", url: inviteUrl };
+    const data = { title: "Orb Duell", text: "Orb Duell gegen mich? Antippen und rein in die Lobby:", url: inviteUrl };
     if (navigator.share) { try { await navigator.share(data); return; } catch (e) { if (e && e.name === "AbortError") return; } }
     try { await navigator.clipboard.writeText(inviteUrl); copiedUntil = now + 2; }
     catch (e) { const r = document.createRange(); r.selectNodeContents($("link")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
@@ -460,23 +505,24 @@
     }
   }
   function shipPos(i) { return i === mySlot ? me : disp[i]; }
-  let prev = { ids: new Map(), s: [0, 0], st: [0, 0], rn: -1, ph: "lobby", cds: 0 };
+  let prev = { ids: new Map(), s: [0, 0, 0, 0], st: [0, 0, 0, 0], rn: -1, ph: "lobby", cds: 0 };
   function diffFx() {
     const cur = new Map(S.o.map(o => [o.id, o]));
     if (S.rn !== prev.rn) {
-      if (!isHost && mySlot === 1) resetShip(me, 1);
-      trails[0].length = trails[1].length = 0; born.clear();
+      if (mySlot !== null) resetShip(me, mySlot);
+      trails.forEach(t => t.length = 0); born.clear();
       for (const o of S.o) born.set(o.id, now);
     } else {
       for (const [id, o] of prev.ids) if (!cur.has(id)) {
         let who = 0, bd = 1e9;
-        for (let i = 0; i < 2; i++) { const p = shipPos(i), d = Math.hypot(p.x - o.x, p.y - o.y); if (d < bd) { bd = d; who = i; } }
-        burst(o.x, o.y, o.k ? SPR.gold : pspr(who), o.k ? 46 : 22, o.k ? 620 : 420);
+        for (let i = 0; i < MAXP; i++) { if (!active(i)) continue; const p = shipPos(i), d = Math.hypot(p.x - o.x, p.y - o.y); if (d < bd) { bd = d; who = i; } }
+        burst(o.x, o.y, o.k ? SPR.gold : PSPR[who], o.k ? 46 : 22, o.k ? 620 : 420);
         rings.push({ x: o.x, y: o.y, t: 0, c: o.k ? GOLD : COL[who] });
         if (who === mySlot) { o.k ? sfx.gold() : sfx.orb(); buzz(o.k ? 40 : 12); if (o.k) flash = .35; } else sfx.far();
         born.delete(id);
       }
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < MAXP; i++) {
+        if (!active(i)) continue;
         const d = S.s[i] - prev.s[i], p = shipPos(i);
         if (d) texts.push({ x: p.x, y: p.y - 50, t: 0, txt: (d > 0 ? "+" : "") + d, c: d > 0 ? (d >= 5 ? GOLD : COL[i]) : MINE, big: Math.abs(d) >= 3 });
         if (S.st[i] > 0 && prev.st[i] <= 0) {
@@ -497,61 +543,102 @@
   const uiCache = {};
   function setText(id, t) { if (uiCache[id] !== t) { uiCache[id] = t; $(id).textContent = t; } }
   function setCls(id, cls, on) { const k = id + "." + cls; if (uiCache[k] !== on) { uiCache[k] = on; $(id).classList.toggle(cls, on); } }
-  function ui() {
-    const opp = mySlot === 1 ? 0 : 1;
-    setText("n0", S.n[0]); setText("n1", S.n[1]);
-    $("n0").dataset.you = mySlot === 0; $("n1").dataset.you = mySlot === 1;
-    setText("s0", String(S.s[0])); setText("s1", String(S.s[1]));
+  function setHidden(id, h) { if ($(id).hidden !== h) $(id).hidden = h; }
+  let lastChipSig = "", lastLobbySig = "", lobbyIds = new Set();
+  function ui(dt) {
+    // HUD
+    const chipSig = S.ids.map(Boolean).join();
+    for (let i = 0; i < MAXP; i++) {
+      const c = chips[i], on = active(i);
+      if (c.el.hidden === on) c.el.hidden = !on;
+      if (!on) continue;
+      if (c.name.textContent !== S.n[i]) c.name.textContent = S.n[i];
+      c.name.dataset.you = i === mySlot;
+      const sTxt = String(S.s[i]); if (c.score.textContent !== sTxt) c.score.textContent = sTxt;
+    }
+    if (chipSig !== lastChipSig) { lastChipSig = chipSig; $("hud").classList.toggle("four", active(2) || active(3)); resize(); }
     const secs = Math.ceil(S.tl / 1000); setText("timer", String(secs));
     setCls("timer", "hot", S.ph === "play" && secs <= 10);
     const showOv = S.ph === "lobby" || S.ph === "end";
-    if ($("overlay").hidden === showOv) $("overlay").hidden = !showOv;
-    $("endbox").hidden = S.ph !== "end";
+    setHidden("overlay", !showOv);
+    setHidden("endbox", S.ph !== "end");
+
+    const act = [0, 1, 2, 3].filter(active);
     if (S.ph === "end") {
-      const a = S.s[0], b = S.s[1];
+      const best = Math.max(...act.map(i => S.s[i]));
+      const winners = act.filter(i => S.s[i] === best);
       let r;
-      if (a === b) r = "Unentschieden!";
-      else if (mySlot === null) r = (a > b ? S.n[0] : S.n[1]) + " gewinnt";
-      else r = (S.s[mySlot] > S.s[opp]) ? "Du gewinnst!" : (S.n[opp] + " gewinnt");
-      setText("result", r); setText("finals", `${S.n[0]}  ${a} : ${b}  ${S.n[1]}`);
+      if (winners.length > 1) r = "Unentschieden!";
+      else if (winners[0] === mySlot) r = "Du gewinnst!";
+      else r = S.n[winners[0]] + " gewinnt";
+      setText("result", r);
+      const sig = act.map(i => S.n[i] + S.s[i]).join("|");
+      if (uiCache.finals !== sig) {
+        uiCache.finals = sig;
+        $("finals").replaceChildren(...act.slice().sort((a, b) => S.s[b] - S.s[a]).map(i => {
+          const li = document.createElement("li"); li.style.setProperty("--c", COL[i]);
+          const a = document.createElement("span"); a.textContent = S.n[i] + (i === mySlot ? " (du)" : "");
+          const b = document.createElement("span"); b.textContent = S.s[i];
+          li.append(a, b); return li;
+        }));
+      }
       setText("kicker", "Runde vorbei");
-    } else setText("kicker", "Echtzeit-Duell für zwei Handys");
-    let st, cls;
+    } else setText("kicker", "Neon-Duell für bis zu 4 Handys");
+
+    // Lobby-Liste
+    const lobbySig = S.ids.map((id, i) => id ? id + S.n[i] + (i === mySlot) : "-").join("|");
+    if (lobbySig !== lastLobbySig) {
+      lastLobbySig = lobbySig;
+      const nowIds = new Set(S.ids.filter(Boolean));
+      $("players").replaceChildren(...S.ids.map((id, i) => {
+        const li = document.createElement("li");
+        li.style.setProperty("--c", COL[i]);
+        if (!id) { li.className = "free"; li.innerHTML = `<span class="dot"></span><span class="pn">Platz frei</span>`; return li; }
+        if (lobbyIds.size && !lobbyIds.has(id)) li.className = "new";
+        const dot = document.createElement("span"); dot.className = "dot";
+        const pn = document.createElement("span"); pn.className = "pn"; pn.textContent = S.n[i] || "Spieler " + (i + 1);
+        li.append(dot, pn);
+        const tags = [];
+        if (i === 0) tags.push("Host");
+        if (i === mySlot) tags.push("Du");
+        if (id === "bot") tags.push("Bot");
+        tags.forEach(t => { const s = document.createElement("span"); s.className = "tag"; s.textContent = t; li.append(s); });
+        return li;
+      }));
+      lobbyIds = nowIds;
+    }
+
+    // Status
     const up = linkUp(), noNet = !window.mqtt || (!up && performance.now() - netStart > 8000);
-    let ct, ccl;
-    if (noNet) { st = "Keine Verbindung zum Spielserver. Du spielst gegen den Bot. Prüf dein Internet und lade die Seite neu."; cls = ""; ct = "Offline"; ccl = ""; }
-    else if (!up) { st = "Verbinde mit dem Spielserver…"; cls = "wait"; ct = "Verbinde"; ccl = "wait"; }
-    else if (partner && isHost) { st = `${S.n[1]} ist da und fliegt gegen dich. Drück Start!`; cls = "on"; ct = `${S.n[1]} online`; ccl = "on"; }
-    else if (partner) { st = `Verbunden mit ${S.n[0]}. Einer von euch drückt Start.`; cls = "on"; ct = `${S.n[0]} online`; ccl = "on"; }
-    else if (isHost) { st = "Warte auf deinen Kumpel. Schick ihm den Link oder deinen Raum-Code. Bis dahin spielst du gegen den Bot."; cls = "wait"; ct = "Allein"; ccl = "wait"; }
-    else if (mySlot === null && peers.size && S.p2 !== "bot") { st = `${S.n[0]} und ${S.n[1]} spielen gerade. Du schaust zu.`; cls = "on"; ct = "Zuschauer"; ccl = "on"; }
-    else { st = `Suche deinen Kumpel in Raum ${code}…`; cls = "wait"; ct = "Suche"; ccl = "wait"; }
-    setText("conntext", ct); setCls("conn", "on", ccl === "on"); setCls("conn", "wait", ccl === "wait");
+    const humans = act.filter(i => S.ids[i] !== "bot").length;
+    const hostName = S.n[0] || "dem Host";
+    let st, cls, ct, ccl, btn = S.ph === "end" ? "Nochmal" : "Runde starten", canGo = false;
+    if (noNet && isHost) { st = "Keine Verbindung zum Spielserver. Du spielst gegen den Bot. Prüf dein Internet und lade die Seite neu."; cls = ""; ct = "Offline"; ccl = ""; canGo = true; }
+    else if (!up) { st = "Verbinde mit dem Spielserver…"; cls = "wait"; ct = "Verbinde"; ccl = "wait"; canGo = isHost; }
+    else if (isHost && humans < 2) { st = "Warte auf deine Kumpels. Schick ihnen den Link oder den Raum-Code. Du kannst auch schon gegen den Bot spielen."; cls = "wait"; ct = "Allein"; ccl = "wait"; canGo = true; }
+    else if (isHost) { st = `${humans} Spieler in der Lobby. Du bist der Host und startest die Runde.`; cls = "on"; ct = `${humans} online`; ccl = "on"; canGo = true; }
+    else if (!hostId) { st = `Suche die Lobby in Raum ${code}…`; cls = "wait"; ct = "Suche"; ccl = "wait"; btn = "Suche Lobby…"; }
+    else if (mySlot !== null) { st = `Du bist in der Lobby von ${hostName}. ${hostName} startet die Runde.`; cls = "on"; ct = `${humans} online`; ccl = "on"; btn = `Warte auf ${hostName}…`; }
+    else if (S.ph === "play" || S.ph === "cd") { st = "Die Runde läuft gerade. In der nächsten bist du dabei."; cls = "wait"; ct = "Zuschauer"; ccl = "wait"; btn = "Nächste Runde…"; }
+    else { st = "Die Lobby ist voll (4 Spieler). Du schaust zu."; cls = ""; ct = "Zuschauer"; ccl = ""; btn = "Lobby voll"; }
     setText("statustext", st);
     setCls("status", "on", cls === "on"); setCls("status", "wait", cls === "wait");
-    const btn = S.ph === "end" ? "Nochmal" : "Runde starten";
-    const waitingGuest = !isHost && mySlot === null;
-    setText("go", waitingGuest ? (partner || S.p2 !== "bot" && peers.size ? "Zuschauen" : "Suche…") : btn);
-    $("go").disabled = waitingGuest;
-    const inv = isHost && S.p2 === "bot" && !noNet;
-    if ($("invite").hidden === inv) $("invite").hidden = !inv;
-    const jf = !partner && !noNet;
-    if ($("joinform").hidden === jf) $("joinform").hidden = !jf;
+    setText("conntext", ct); setCls("conn", "on", ccl === "on"); setCls("conn", "wait", ccl === "wait");
+    setText("go", btn); if ($("go").disabled === canGo) $("go").disabled = !canGo;
+    setHidden("invite", !(isHost && !noNet && players() - (S.ids.includes("bot") ? 1 : 0) < MAXP));
+    setHidden("joinform", !(humans < 2 && !noNet));
     setText("roomcode", code); setText("link", inviteUrl);
-    setText("share", copiedUntil > now ? "Link kopiert!" : "Kumpel einladen");
-    if (toastT > 0 && (toastT -= 1 / 60) <= 0) $("toast").hidden = true;
+    setText("share", copiedUntil > now ? "Link kopiert!" : "Kumpels einladen");
+    if (toastT > 0 && (toastT -= dt) <= 0) $("toast").hidden = true;
   }
-  const youStyle = document.createElement("style");
-  youStyle.textContent = '.name[data-you="true"]::after{content:"DU";font-size:9px;letter-spacing:.14em;padding:1px 4px;margin-left:6px;border:1px solid currentColor;border-radius:3px;color:var(--ink)}';
-  document.head.appendChild(youStyle);
 
   // ---------- render ----------
   function drawShip(i, p, stunned) {
     const t = trails[i];
     ctx.globalCompositeOperation = "lighter";
-    for (let k = 0; k < t.length; k++) { const q = t[k], f = k / t.length; spr(pspr(i), q[0], q[1], 8 + f * 26, f * .35); }
+    for (let k = 0; k < t.length; k++) { const q = t[k], f = k / t.length; spr(PSPR[i], q[0], q[1], 8 + f * 26, f * .35); }
     const flick = stunned ? (Math.sin(now * 40) > 0 ? .25 : 1) : 1;
-    spr(pspr(i), p.x, p.y, 100 + Math.sin(now * 6 + i) * 8, .85 * flick);
+    spr(PSPR[i], p.x, p.y, 100 + Math.sin(now * 6 + i) * 8, .85 * flick);
     const fl = 18 + Math.random() * 14;
     spr(SPR.white, p.x - Math.cos(p.a) * 34, p.y - Math.sin(p.a) * 34, fl, .7 * flick);
     ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = flick;
@@ -610,7 +697,6 @@
     let sx = 0, sy = 0; if (shake > .3) { sx = (Math.random() - .5) * shake; sy = (Math.random() - .5) * shake; }
     ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (ox + sx), dpr * (oy + sy));
 
-    // arena
     ctx.fillStyle = "rgba(10,5,30,.55)"; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = "rgba(139,107,255,.08)"; ctx.lineWidth = 2; ctx.beginPath();
     for (let x = 100; x < W; x += 100) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
@@ -618,7 +704,7 @@
     ctx.stroke();
     ctx.strokeStyle = "rgba(139,107,255,.22)"; ctx.setLineDash([14, 14]); ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke(); ctx.setLineDash([]);
     [[14, .12], [6, .3], [2.5, .95]].forEach(([w, a]) => { ctx.strokeStyle = `rgba(160,130,255,${a})`; ctx.lineWidth = w; ctx.strokeRect(0, 0, W, H); });
-    ctx.strokeStyle = COL[0]; ctx.lineWidth = 6;
+    ctx.lineWidth = 6;
     [[0, 0, 1, 1], [W, 0, -1, 1], [0, H, 1, -1], [W, H, -1, -1]].forEach(([x, y, dx, dy], j) => {
       ctx.strokeStyle = j < 2 ? COL[1] : COL[0];
       ctx.beginPath(); ctx.moveTo(x + dx * 70, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * 70); ctx.stroke();
@@ -626,10 +712,7 @@
 
     for (const o of S.o) drawOrb(o);
     S.m.forEach((m, k) => drawMine(dispM[k] || m, k));
-
-    for (let i = 0; i < 2; i++) {
-      drawShip(i, shipPos(i), S.st[i] > 0);
-    }
+    for (let i = 0; i < MAXP; i++) if (active(i)) drawShip(i, shipPos(i), S.st[i] > 0);
 
     ctx.globalCompositeOperation = "lighter";
     rings = rings.filter(r => (r.t += dt) < .5);
@@ -647,7 +730,6 @@
     }
     ctx.globalAlpha = 1;
 
-    // countdown and LOS
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (S.ph === "cd") {
       const n = Math.max(1, Math.ceil(S.cd / 1000)), f = (S.cd / 1000) % 1;
@@ -667,33 +749,28 @@
   let last = performance.now();
   function frame(t) {
     const dt = Math.min(.05, (t - last) / 1000); last = t; now += dt;
-    if (mySlot !== null) {
-      const stunned = S.st[mySlot] > 0, frozen = S.ph === "cd";
-      if (!frozen) moveShip(me, me.tx, me.ty, dt, stunned ? .25 : 1);
-    }
+    roles();
+    if (mySlot !== null && S.ph !== "cd") moveShip(me, me.tx, me.ty, dt, S.st[mySlot] > 0 ? .25 : 1);
     if (isHost) hostStep(dt);
-    // smooth remote ships
-    const k = 1 - Math.exp(-dt * 14);
-    for (let i = 0; i < 2; i++) {
-      if (i === mySlot) { disp[i].x = me.x; disp[i].y = me.y; disp[i].a = me.a; }
+    const k = 1 - Math.exp(-dt * 12);
+    for (let i = 0; i < MAXP; i++) {
+      const d = disp[i];
+      if (i === mySlot) { d.x = me.x; d.y = me.y; d.a = me.a; }
       else {
-        const [x, y, a] = S.pl[i], d = disp[i];
+        const [x, y, a] = S.pl[i];
         if (Math.hypot(x - d.x, y - d.y) > 400) { d.x = x; d.y = y; } else { d.x += (x - d.x) * k; d.y += (y - d.y) * k; }
         let da = a - d.a; da = Math.atan2(Math.sin(da), Math.cos(da)); d.a += da * k;
       }
-      const p = shipPos(i), tr = trails[i];
-      tr.push([p.x, p.y]); if (tr.length > 22) tr.shift();
+      const tr = trails[i];
+      if (active(i)) { tr.push([d.x, d.y]); if (tr.length > 22) tr.shift(); } else tr.length = 0;
     }
     if (isHost) dispM = S.m.map(m => ({ x: m.x, y: m.y }));
-    else {
-      if (dispM.length !== S.m.length) dispM = S.m.map(m => ({ x: m.x, y: m.y }));
-      else S.m.forEach((m, j) => { dispM[j].x += (m.x - dispM[j].x) * k; dispM[j].y += (m.y - dispM[j].y) * k; });
-    }
+    else if (dispM.length !== S.m.length) dispM = S.m.map(m => ({ x: m.x, y: m.y }));
+    else S.m.forEach((m, j) => { dispM[j].x += (m.x - dispM[j].x) * k; dispM[j].y += (m.y - dispM[j].y) * k; });
     diffFx();
     shake *= Math.pow(.86, dt * 60); flash = Math.max(0, flash - dt); losT = Math.max(0, losT - dt);
-    roles();
     netSend();
-    ui();
+    ui(dt);
     render(dt);
     requestAnimationFrame(frame);
   }
