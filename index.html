@@ -142,6 +142,15 @@
   #pad .knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px; border-radius: 50%;
     background: radial-gradient(circle at 38% 34%, #fff, var(--c) 55%); box-shadow: 0 0 20px var(--c); opacity: .85; }
   #pad.on .knob { opacity: 1; }
+  /* ---------- Item-Knopf ---------- */
+  #itembtn { position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); z-index: 2; width: 84px; height: 84px; border-radius: 50%;
+    display: grid; place-items: center; font: 700 13px var(--disp); letter-spacing: .08em; color: var(--ic); cursor: pointer;
+    background: radial-gradient(circle, rgba(20, 12, 48, .55), rgba(20, 12, 48, .9)); border: 2px solid var(--ic);
+    box-shadow: 0 0 22px var(--ic), inset 0 0 18px rgba(255, 255, 255, .08); animation: ready 1s ease-in-out infinite alternate; touch-action: none; }
+  #itembtn:active { transform: scale(.94); }
+  @keyframes ready { to { box-shadow: 0 0 34px var(--ic), inset 0 0 18px rgba(255, 255, 255, .12); } }
+  .rules .k { color: var(--ok); }
+  @media (prefers-reduced-motion: reduce) { #itembtn { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #timer.hot, #status.wait .led, .conn.wait i, #toast, #players li.new { animation: none; } }
 </style>
 </head>
@@ -156,6 +165,8 @@
 </div>
 
 <div id="toast" hidden></div>
+
+<button id="itembtn" type="button" hidden>TURBO</button>
 
 <div id="pad" hidden><div class="base"><div class="knob"></div></div></div>
 
@@ -199,6 +210,7 @@
       <dt class="o">Orb</dt><dd>+1 Punkt</dd>
       <dt class="g">Gold</dt><dd>+5 Punkte</dd>
       <dt class="m">Mine</dt><dd>−3 Punkte und kurz gelähmt</dd>
+      <dt class="k">Kiste</dt><dd>Gibt ein Item. Einsetzen mit dem Knopf unten rechts: Turbo, Magnet, Schild, Mine legen oder EMP.</dd>
     </dl>
   </div>
 </div>
@@ -226,7 +238,15 @@
     g.fillStyle = gr; g.fillRect(0, 0, r * 2, r * 2); return c;
   }
   const PSPR = COL.map(c => glow(c));
-  const SPR = { gold: glow(GOLD), mine: glow(MINE), white: glow(WHITE), violet: glow("#8B6BFF") };
+  const SPR = { gold: glow(GOLD), mine: glow(MINE), white: glow(WHITE), violet: glow("#8B6BFF"), box: glow("#6BFFB0") };
+  // Items: 1 Turbo, 2 Magnet, 3 Schild, 4 Mine legen, 5 EMP
+  const ITEMS = [null,
+    { n: "Turbo", c: "#FFD66B", tip: "3 Sekunden doppelt so schnell" },
+    { n: "Magnet", c: "#B9A6FF", tip: "zieht Orbs in der Nähe an" },
+    { n: "Schild", c: "#6BFFB0", tip: "schützt einmal vor Mine oder EMP" },
+    { n: "Mine", c: "#FF4A3D", tip: "legt eine Mine hinter dir ab" },
+    { n: "EMP", c: "#57E1FF", tip: "lähmt alle anderen kurz" }];
+  const BOX_R = 30, TURBO = 3000, MAGNET = 4000, MAG_R = 420, EMP_STUN = 1300;
   function spr(s, x, y, r, a = 1) { ctx.globalAlpha = a; ctx.drawImage(s, x - r, y - r, r * 2, r * 2); }
 
   // ---------- HUD-Chips ----------
@@ -276,13 +296,18 @@
     hit: () => { tone(160, .35, "sawtooth", .16, .35); tone(90, .4, "square", .08, .5); },
     beep: () => tone(520, .12, "square", .07),
     los: () => tone(1040, .35, "square", .08, 1.3),
+    pow: () => { tone(440, .18, "sawtooth", .06, 2.2); tone(880, .2, "triangle", .08, 1.5, .06); },
+    emp: () => { tone(1400, .5, "sawtooth", .07, .1); tone(70, .45, "square", .1, .6); },
     end: () => { tone(523, .15, "triangle", .12); tone(659, .15, "triangle", .12, 0, .14); tone(784, .4, "triangle", .12, 0, .28); },
   };
   function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { } }
 
   // ---------- state ----------
   // ids[i]: wer fliegt Schiff i (Peer-Id, "bot" oder null). Slot 0 ist immer der Host.
-  const S = { ph: "lobby", tl: ROUND, cd: 0, rn: 0, ids: [null, "bot", null, null], n: ["Spieler 1", "Bot", "", ""], s: [0, 0, 0, 0], st: [0, 0, 0, 0], pl: SPAWN.map(p => p.slice()), o: [], m: [] };
+  const S = { ph: "lobby", tl: ROUND, cd: 0, rn: 0, ids: [null, "bot", null, null], n: ["Spieler 1", "Bot", "", ""], s: [0, 0, 0, 0], st: [0, 0, 0, 0], pl: SPAWN.map(p => p.slice()), o: [], m: [],
+    b: [], it: [0, 0, 0, 0], tu: [0, 0, 0, 0], mg: [0, 0, 0, 0], sh: [0, 0, 0, 0], emp: [0, 0, 0, 0] };
+  let boxT = 5000, useCount = 0, hideItemUntil = 0;
+  const inv = [0, 0, 0, 0], usedSeen = new Map();
   let isHost = true, mySlot = 0;
   let orbId = 1;
   const mkShip = i => ({ x: SPAWN[i][0], y: SPAWN[i][1], vx: 0, vy: 0, a: SPAWN[i][2], tx: SPAWN[i][0], ty: SPAWN[i][1] });
@@ -328,6 +353,7 @@
     const np = players();
     S.ph = "cd"; S.cd = 3000; S.tl = ROUND; S.s = [0, 0, 0, 0]; S.st = [0, 0, 0, 0]; S.o = []; S.rn++;
     S.m = Array.from({ length: np > 2 ? 4 : 3 }, makeMine);
+    S.b = []; S.it = [0, 0, 0, 0]; S.tu = [0, 0, 0, 0]; S.mg = [0, 0, 0, 0]; S.sh = [0, 0, 0, 0]; boxT = 5000;
     resetShip(me, 0); resetShip(bot, 1);
     S.pl = SPAWN.map(p => p.slice());
     for (let i = 0; i < 5 + np; i++) spawnOrb();
@@ -342,7 +368,30 @@
     }
     let tx = bot.tx, ty = bot.ty;
     for (const m of S.m) { const dx = bot.x - m.x, dy = bot.y - m.y, d = Math.hypot(dx, dy); if (d < 180 && d > 1) { tx += dx / d * 220; ty += dy / d * 220; } }
-    moveShip(bot, tx, ty, dt, S.st[1] > 0 ? .25 : .6);
+    moveShip(bot, tx, ty, dt, S.st[1] > 0 ? .25 : S.tu[1] > 0 ? 1.1 : .6);
+  }
+  function useItem(i) {
+    const k = S.it[i]; if (!k || S.ph !== "play") return;
+    S.it[i] = 0;
+    const [px, py, pa] = S.pl[i];
+    if (k === 1) S.tu[i] = TURBO;
+    else if (k === 2) S.mg[i] = MAGNET;
+    else if (k === 3) S.sh[i] = 1;
+    else if (k === 4) S.m.push({ x: clamp(px - Math.cos(pa) * 70, 50, W - 50), y: clamp(py - Math.sin(pa) * 70, 50, H - 50), vx: 0, vy: 0, w: i, life: 10000 });
+    else if (k === 5) {
+      S.emp[i]++;
+      for (let j = 0; j < MAXP; j++) {
+        if (j === i || !active(j) || inv[j] > 0) continue;
+        if (S.sh[j]) { S.sh[j] = 0; inv[j] = 600; } else S.st[j] = Math.max(S.st[j], EMP_STUN);
+      }
+    }
+  }
+  function spawnBox() {
+    for (let tries = 0; tries < 20; tries++) {
+      const x = 90 + Math.random() * (W - 180), y = 120 + Math.random() * (H - 240);
+      if (S.pl.some((p, i) => active(i) && Math.hypot(p[0] - x, p[1] - y) < 220)) continue;
+      S.b.push({ id: orbId++, x, y }); return;
+    }
   }
   function hostStep(dt) {
     const ms = dt * 1000;
@@ -356,6 +405,9 @@
           const pr = pv.p;
           S.pl[i] = [num(pr.x, S.pl[i][0], 0, W), num(pr.y, S.pl[i][1], 0, H), num(pr.a, 0, -7, 7)];
           S.n[i] = cleanName(pr.n, "Spieler " + (i + 1));
+          const u = num(pr.u, 0, 0, 1e9), seen = usedSeen.get(id);
+          if (seen === undefined || u < seen) usedSeen.set(id, u);
+          else if (u > seen) { usedSeen.set(id, u); useItem(i); }
         }
       } else S.n[i] = "";
     }
@@ -363,9 +415,22 @@
     else if (S.ph === "play") {
       S.tl -= ms;
       S.st = S.st.map(v => Math.max(0, v - ms));
+      S.tu = S.tu.map(v => Math.max(0, v - ms)); S.mg = S.mg.map(v => Math.max(0, v - ms));
+      for (let i = 0; i < MAXP; i++) inv[i] = Math.max(0, inv[i] - ms);
       const extra = players() > 2 ? 1 : 0;
       const want = (S.tl < 15000 ? 5 : S.tl < 35000 ? 4 : 3) + extra;
-      while (S.m.length < want) S.m.push(makeMine());
+      while (S.m.filter(m => m.w == null).length < want) S.m.push(makeMine());
+      S.m = S.m.filter(m => m.w == null || (m.life -= ms) > 0);
+      if ((boxT -= ms) <= 0) { boxT = 7000 + Math.random() * 4000; if (S.b.length < (players() > 2 ? 2 : 1)) spawnBox(); }
+      if (S.ids[1] === "bot" && S.it[1] && Math.random() < dt * .6) useItem(1);
+      for (let i = 0; i < MAXP; i++) {
+        if (!active(i) || !S.mg[i]) continue;
+        const [px, py] = S.pl[i];
+        for (const o of S.o) {
+          const dx = px - o.x, dy = py - o.y, d = Math.hypot(dx, dy);
+          if (d < MAG_R && d > 1) { const v = Math.min(d, 900 * dt); o.x += dx / d * v; o.y += dy / d * v; }
+        }
+      }
       for (const m of S.m) {
         m.x += m.vx * dt; m.y += m.vy * dt;
         if (m.x < 50 || m.x > W - 50) { m.vx *= -1; m.x = clamp(m.x, 50, W - 50); }
@@ -375,7 +440,13 @@
         if (!active(i)) continue;
         const [px, py] = S.pl[i];
         S.o = S.o.filter(o => { if (Math.hypot(o.x - px, o.y - py) < SHIP_R + ORB_R + (o.k ? 6 : 0)) { S.s[i] += o.k ? 5 : 1; return false; } return true; });
-        if (S.st[i] <= 0) for (const m of S.m) if (Math.hypot(m.x - px, m.y - py) < SHIP_R + MINE_R - 6) { S.s[i] = Math.max(0, S.s[i] - 3); S.st[i] = 1400; break; }
+        if (!S.it[i]) S.b = S.b.filter(b => { if (Math.hypot(b.x - px, b.y - py) < SHIP_R + BOX_R) { S.it[i] = 1 + Math.floor(Math.random() * 5); return false; } return true; });
+        if (S.st[i] <= 0 && inv[i] <= 0) for (const m of S.m) if (m.w !== i && Math.hypot(m.x - px, m.y - py) < SHIP_R + MINE_R - 6) {
+          if (S.sh[i]) { S.sh[i] = 0; inv[i] = 900; }
+          else { S.s[i] = Math.max(0, S.s[i] - 3); S.st[i] = 1400; }
+          if (m.w != null) m.life = 0;
+          break;
+        }
       }
       while (S.o.length < 5 + players()) spawnOrb();
       if (S.tl <= 0) { S.tl = 0; S.ph = "end"; }
@@ -385,7 +456,8 @@
     const r = Math.round;
     return {
       ph: S.ph, tl: r(S.tl), cd: r(S.cd), rn: S.rn, ids: S.ids, n: S.n, s: S.s, st: S.st.map(r),
-      o: S.o.map(o => [o.id, r(o.x), r(o.y), o.k]), m: S.m.map(m => [r(m.x), r(m.y)]),
+      o: S.o.map(o => [o.id, r(o.x), r(o.y), o.k]), m: S.m.map(m => [r(m.x), r(m.y), m.w ?? -1]),
+      b: S.b.map(b => [b.id, r(b.x), r(b.y)]), it: S.it, tu: S.tu.map(r), mg: S.mg.map(r), sh: S.sh, emp: S.emp,
       pl: S.pl.map(p => [r(p[0]), r(p[1]), r(p[2] * 100)]),
     };
   }
@@ -400,7 +472,13 @@
     S.s = arr4(st.s, v => num(v, 0, 0, 9999)) || S.s;
     S.st = arr4(st.st, v => num(v, 0, 0, 5000)) || S.st;
     if (Array.isArray(st.o)) S.o = st.o.slice(0, 20).filter(Array.isArray).map(o => ({ id: num(o[0], 0, 0, 1e12), x: num(o[1], 0, 0, W), y: num(o[2], 0, 0, H), k: o[3] === 1 ? 1 : 0 }));
-    if (Array.isArray(st.m)) S.m = st.m.slice(0, 10).filter(Array.isArray).map(m => ({ x: num(m[0], 0, 0, W), y: num(m[1], 0, 0, H) }));
+    if (Array.isArray(st.m)) S.m = st.m.slice(0, 20).filter(Array.isArray).map(m => { const w = num(m[2], -1, -1, 3); return { x: num(m[0], 0, 0, W), y: num(m[1], 0, 0, H), w: w < 0 ? null : Math.round(w) }; });
+    if (Array.isArray(st.b)) S.b = st.b.slice(0, 4).filter(Array.isArray).map(b => ({ id: num(b[0], 0, 0, 1e12), x: num(b[1], 0, 0, W), y: num(b[2], 0, 0, H) }));
+    S.it = arr4(st.it, v => Math.round(num(v, 0, 0, 5))) || S.it;
+    S.tu = arr4(st.tu, v => num(v, 0, 0, TURBO)) || S.tu;
+    S.mg = arr4(st.mg, v => num(v, 0, 0, MAGNET)) || S.mg;
+    S.sh = arr4(st.sh, v => v === 1 ? 1 : 0) || S.sh;
+    S.emp = arr4(st.emp, v => num(v, 0, 0, 1e6)) || S.emp;
     const pl = arr4(st.pl, (p, i) => Array.isArray(p) ? [num(p[0], SPAWN[i][0], 0, W), num(p[1], SPAWN[i][1], 0, H), num(p[2], 0, -700, 700) / 100] : S.pl[i]);
     if (pl) S.pl = pl;
   }
@@ -424,6 +502,7 @@
   function becomeHost() {
     isHost = true; mySlot = 0; S.rn++;
     S.ids = [myId, "bot", null, null]; S.ph = "lobby"; S.tl = ROUND; S.s = [0, 0, 0, 0]; S.st = [0, 0, 0, 0]; S.o = []; S.m = [];
+    S.b = []; S.it = [0, 0, 0, 0]; S.tu = [0, 0, 0, 0]; S.mg = [0, 0, 0, 0]; S.sh = [0, 0, 0, 0];
     resetShip(me, 0); resetShip(bot, 1);
   }
   function linkUp() { return clients.some(c => c.connected); }
@@ -491,7 +570,7 @@
   function netSend() {
     if (!linkUp() || now - lastSend < 1 / 15) return;
     lastSend = now;
-    const d = { id: myId, q: ++seq, n: myName || null, h: isHost ? 1 : 0, x: Math.round(me.x), y: Math.round(me.y), a: Math.round(me.a * 100) / 100 };
+    const d = { id: myId, q: ++seq, n: myName || null, h: isHost ? 1 : 0, x: Math.round(me.x), y: Math.round(me.y), a: Math.round(me.a * 100) / 100, u: useCount };
     if (isHost) d.st = packState();
     const txt = JSON.stringify(d);
     for (const c of clients) if (c.connected) { try { c.publish(TOPIC, txt, { qos: 0 }); } catch (e) { } }
@@ -529,6 +608,14 @@
     me.tx = me.x; me.ty = me.y; resize();
   }
   document.querySelectorAll("[data-ctl]").forEach(b => b.addEventListener("click", () => setCtl(b.dataset.ctl)));
+
+  function fireItem() {
+    if (mySlot === null || !S.it[mySlot] || S.ph !== "play") return;
+    audio(); buzz(25);
+    if (isHost) useItem(0); else { useCount++; lastSend = -1; hideItemUntil = now + 1; }
+  }
+  $("itembtn").addEventListener("pointerdown", e => { e.preventDefault(); fireItem(); });
+  addEventListener("keydown", e => { if (e.code === "Space" && document.activeElement.tagName !== "INPUT") { e.preventDefault(); fireItem(); } });
   document.addEventListener("pointerdown", audio, { once: true });
   $("go").addEventListener("click", () => {
     audio();
@@ -556,7 +643,7 @@
     }
   }
   function shipPos(i) { return i === mySlot ? me : disp[i]; }
-  let prev = { ids: new Map(), s: [0, 0, 0, 0], st: [0, 0, 0, 0], rn: -1, ph: "lobby", cds: 0 };
+  let prev = { ids: new Map(), s: [0, 0, 0, 0], st: [0, 0, 0, 0], rn: -1, ph: "lobby", cds: 0, it: [0, 0, 0, 0], emp: [0, 0, 0, 0], sh: [0, 0, 0, 0], tu: [0, 0, 0, 0], mg: [0, 0, 0, 0], b: new Map() };
   function diffFx() {
     const cur = new Map(S.o.map(o => [o.id, o]));
     if (S.rn !== prev.rn) {
@@ -576,6 +663,14 @@
         if (!active(i)) continue;
         const d = S.s[i] - prev.s[i], p = shipPos(i);
         if (d) texts.push({ x: p.x, y: p.y - 50, t: 0, txt: (d > 0 ? "+" : "") + d, c: d > 0 ? (d >= 5 ? GOLD : COL[i]) : MINE, big: Math.abs(d) >= 3 });
+        if (S.it[i] && !prev.it[i]) {
+          const b = [...prev.b.values()].sort((a, c) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(c.x - p.x, c.y - p.y))[0] || p;
+          burst(b.x, b.y, SPR.box, 36, 520); rings.push({ x: b.x, y: b.y, t: 0, c: "#6BFFB0" });
+          if (i === mySlot) { const it = ITEMS[S.it[i]]; toast(`${it.n}! ${it.tip}`, false); sfx.gold(); buzz(30); }
+        }
+        if (S.emp[i] > prev.emp[i]) { rings.push({ x: p.x, y: p.y, t: 0, c: ITEMS[5].c, big: 1 }); burst(p.x, p.y, PSPR[i], 60, 900, .9); sfx.emp(); if (i !== mySlot) { shake = 16; buzz([50, 30, 50]); } }
+        if ((S.tu[i] > 0 && !prev.tu[i]) || (S.mg[i] > 0 && !prev.mg[i]) || (S.sh[i] && !prev.sh[i])) { rings.push({ x: p.x, y: p.y, t: 0, c: S.sh[i] && !prev.sh[i] ? ITEMS[3].c : S.tu[i] && !prev.tu[i] ? ITEMS[1].c : ITEMS[2].c }); if (i === mySlot) sfx.pow(); }
+        if (!S.sh[i] && prev.sh[i] && S.ph === "play") { burst(p.x, p.y, SPR.box, 40, 600); rings.push({ x: p.x, y: p.y, t: 0, c: ITEMS[3].c }); if (i === mySlot) { sfx.far(); buzz(40); } }
         if (S.st[i] > 0 && prev.st[i] <= 0) {
           burst(p.x, p.y, SPR.mine, 50, 700, 1); rings.push({ x: p.x, y: p.y, t: 0, c: MINE });
           if (i === mySlot) { shake = 22; buzz([60, 40, 60]); sfx.hit(); }
@@ -583,11 +678,12 @@
       }
     }
     for (const o of S.o) if (!born.has(o.id)) born.set(o.id, now);
+    for (const b of S.b) if (!born.has(b.id)) born.set(b.id, now);
     const cds = S.ph === "cd" ? Math.ceil(S.cd / 1000) : 0;
     if (cds && cds !== prev.cds) sfx.beep();
     if (prev.ph === "cd" && S.ph === "play") { sfx.los(); losT = .9; }
     if (prev.ph === "play" && S.ph === "end") sfx.end();
-    prev = { ids: cur, s: S.s.slice(), st: S.st.slice(), rn: S.rn, ph: S.ph, cds };
+    prev = { ids: cur, s: S.s.slice(), st: S.st.slice(), rn: S.rn, ph: S.ph, cds, it: S.it.slice(), emp: S.emp.slice(), sh: S.sh.slice(), tu: S.tu.slice(), mg: S.mg.slice(), b: new Map(S.b.map(b => [b.id, b])) };
   }
 
   // ---------- UI ----------
@@ -681,6 +777,10 @@
     setText("roomcode", code); setText("link", inviteUrl);
     setText("share", copiedUntil > now ? "Link kopiert!" : "Kumpels einladen");
     if (toastT > 0 && (toastT -= dt) <= 0) $("toast").hidden = true;
+    const held = mySlot !== null && S.ph === "play" && now > hideItemUntil ? S.it[mySlot] : 0;
+    setHidden("itembtn", !held);
+    if (held && uiCache.held !== held) { uiCache.held = held; $("itembtn").textContent = ITEMS[held].n.toUpperCase(); $("itembtn").style.setProperty("--ic", ITEMS[held].c); }
+    if (!held) uiCache.held = 0;
     const kc = COL[mySlot ?? 0]; if (uiCache.kc !== kc) { uiCache.kc = kc; pad.style.setProperty("--c", kc); }
   }
 
@@ -705,14 +805,38 @@
       ctx.beginPath(); ctx.arc(p.x, p.y, 56, now * 1.5, now * 1.5 + Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     }
   }
-  function drawMine(m, k) {
+  function drawBox(b) {
+    const age = clamp((now - (born.get(b.id) ?? now)) / .35, 0, 1), sIn = 1 - Math.pow(1 - age, 3), bob = Math.sin(now * 3 + b.id) * 6;
     ctx.globalCompositeOperation = "lighter";
-    spr(SPR.mine, m.x, m.y, 70 + Math.sin(now * 8 + k) * 10, .6);
+    spr(SPR.box, b.x, b.y + bob, 78 * sIn, .75);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.save(); ctx.translate(b.x, b.y + bob); ctx.rotate(Math.sin(now * 2 + b.id) * .25); ctx.scale(sIn, sIn);
+    ctx.fillStyle = "#0d2a22"; ctx.strokeStyle = "#6BFFB0"; ctx.lineWidth = 4; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.rect(-26, -26, 52, 52); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#E6FFF2"; ctx.font = `700 38px ${FAM}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("?", 0, 2);
+    ctx.restore();
+  }
+  function drawAura(i, p) {
+    ctx.lineWidth = 3;
+    if (S.sh[i]) {
+      ctx.globalCompositeOperation = "lighter"; spr(SPR.box, p.x, p.y, 92, .35); ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = rgba(ITEMS[3].c, .8); ctx.beginPath(); ctx.arc(p.x, p.y, 60 + Math.sin(now * 6) * 3, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (S.mg[i] > 0) {
+      const f = (now * .9) % 1;
+      ctx.strokeStyle = rgba(ITEMS[2].c, .45 * (1 - f)); ctx.beginPath(); ctx.arc(p.x, p.y, MAG_R * (1 - f) + 40 * f, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (S.tu[i] > 0) { ctx.globalCompositeOperation = "lighter"; spr(SPR.gold, p.x - Math.cos(p.a) * 50, p.y - Math.sin(p.a) * 50, 40 + Math.random() * 20, .8); ctx.globalCompositeOperation = "source-over"; }
+  }
+  function drawMine(m, k, w) {
+    const mc = w == null ? MINE : COL[w];
+    ctx.globalCompositeOperation = "lighter";
+    spr(w == null ? SPR.mine : PSPR[w], m.x, m.y, 70 + Math.sin(now * 8 + k) * 10, .6);
     ctx.globalCompositeOperation = "source-over";
     ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(now * 2 + k);
     ctx.beginPath();
     for (let j = 0; j < 16; j++) { const r = j % 2 ? 18 : 34, a = j / 16 * Math.PI * 2; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-    ctx.closePath(); ctx.fillStyle = "#2a0710"; ctx.fill(); ctx.strokeStyle = MINE; ctx.lineWidth = 3; ctx.stroke();
+    ctx.closePath(); ctx.fillStyle = "#2a0710"; ctx.fill(); ctx.strokeStyle = mc; ctx.lineWidth = 3; ctx.stroke();
     ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fillStyle = Math.sin(now * 10 + k) > 0 ? "#FFE1DC" : MINE; ctx.fill();
     ctx.restore();
   }
@@ -763,12 +887,13 @@
     });
 
     for (const o of S.o) drawOrb(o);
-    S.m.forEach((m, k) => drawMine(dispM[k] || m, k));
-    for (let i = 0; i < MAXP; i++) if (active(i)) drawShip(i, shipPos(i), S.st[i] > 0);
+    for (const b of S.b) drawBox(b);
+    S.m.forEach((m, k) => drawMine(dispM[k] || m, k, m.w));
+    for (let i = 0; i < MAXP; i++) if (active(i)) { drawAura(i, shipPos(i)); drawShip(i, shipPos(i), S.st[i] > 0); }
 
     ctx.globalCompositeOperation = "lighter";
     rings = rings.filter(r => (r.t += dt) < .5);
-    for (const r of rings) { ctx.globalAlpha = 1 - r.t / .5; ctx.strokeStyle = r.c; ctx.lineWidth = 6 * (1 - r.t / .5) + 1; ctx.beginPath(); ctx.arc(r.x, r.y, 20 + r.t * 260, 0, Math.PI * 2); ctx.stroke(); }
+    for (const r of rings) { ctx.globalAlpha = 1 - r.t / .5; ctx.strokeStyle = r.c; ctx.lineWidth = (r.big ? 14 : 6) * (1 - r.t / .5) + 1; ctx.beginPath(); ctx.arc(r.x, r.y, 20 + r.t * (r.big ? 2400 : 260), 0, Math.PI * 2); ctx.stroke(); }
     parts = parts.filter(p => (p.life -= dt) > 0);
     const drag = Math.pow(.9, dt * 60);
     for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= drag; p.vy *= drag; const f = p.life / p.max; spr(p.s, p.x, p.y, p.r * f + 2, f); }
@@ -802,8 +927,8 @@
   function frame(t) {
     const dt = Math.min(.05, (t - last) / 1000); last = t; now += dt;
     roles();
-    if (ctl === "stick") { me.tx = me.x + stick.x * 200; me.ty = me.y + stick.y * 200; }
-    if (mySlot !== null && S.ph !== "cd") moveShip(me, me.tx, me.ty, dt, S.st[mySlot] > 0 ? .25 : 1);
+    if (ctl === "stick") { const r = S.tu[mySlot ?? 0] > 0 ? 400 : 200; me.tx = me.x + stick.x * r; me.ty = me.y + stick.y * r; }
+    if (mySlot !== null && S.ph !== "cd") moveShip(me, me.tx, me.ty, dt, S.st[mySlot] > 0 ? .25 : S.tu[mySlot] > 0 ? 1.8 : 1);
     if (isHost) hostStep(dt);
     const k = 1 - Math.exp(-dt * 12);
     for (let i = 0; i < MAXP; i++) {
