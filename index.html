@@ -135,13 +135,13 @@
 
   /* ---------- Joystick ---------- */
   #pad { position: fixed; inset: 0; z-index: 1; pointer-events: none; --c: var(--p1); }
-  #pad .base { position: absolute; left: 0; top: 0; width: 132px; height: 132px; margin: -66px; border-radius: 50%; border: 1px solid var(--line); opacity: .4; transition: opacity .15s;
-    background: radial-gradient(circle, rgba(20, 12, 48, .35), rgba(20, 12, 48, .8)); box-shadow: inset 0 0 26px rgba(160, 140, 255, .18); }
+  #pad .base { position: absolute; left: 0; top: 0; width: 132px; height: 132px; margin: -66px; border-radius: 50%; border: 1px solid var(--line); opacity: .22; transition: opacity .15s;
+    background: radial-gradient(circle, rgba(20, 12, 48, .08), rgba(20, 12, 48, .3)); box-shadow: inset 0 0 26px rgba(160, 140, 255, .18); }
   #pad .base::before { content: ""; position: absolute; inset: 30%; border-radius: 50%; border: 1px dashed var(--line); }
   #pad .knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px; border-radius: 50%;
-    background: radial-gradient(circle at 38% 34%, #fff, var(--c) 55%); box-shadow: 0 0 20px var(--c); opacity: .85; }
-  #pad.on .knob { opacity: 1; }
-  #pad.on .base { opacity: 1; transition: none; }
+    background: radial-gradient(circle at 38% 34%, #fff, var(--c) 55%); box-shadow: 0 0 20px var(--c); opacity: .6; }
+  #pad.on .knob { opacity: .55; }
+  #pad.on .base { opacity: .55; transition: none; }
   /* ---------- Item-Knopf ---------- */
   #itembtn { position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); z-index: 2; width: 84px; height: 84px; border-radius: 50%;
     display: grid; place-items: center; font: 700 13px var(--disp); letter-spacing: .08em; color: var(--ic); cursor: pointer;
@@ -150,6 +150,16 @@
   #itembtn:active { transform: scale(.94); }
   @keyframes ready { to { box-shadow: 0 0 34px var(--ic), inset 0 0 18px rgba(255, 255, 255, .12); } }
   .rules .k { color: var(--ok); }
+  #itemtip { position: fixed; right: 110px; bottom: calc(env(safe-area-inset-bottom, 0px) + 34px); z-index: 2; max-width: calc(100% - 130px); pointer-events: none;
+    font: 600 12px var(--disp); letter-spacing: .04em; line-height: 1.3; color: var(--ink); padding: 6px 10px; border-radius: 8px;
+    background: rgba(11, 6, 32, .55); border: 1px solid var(--ic); transition: opacity .4s; }
+  #itemtip b { color: var(--ic); text-transform: uppercase; letter-spacing: .1em; }
+  .ichips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ichips button { font: 700 12px var(--disp); letter-spacing: .1em; text-transform: uppercase; padding: 7px 10px; border-radius: 99px; cursor: pointer;
+    color: var(--muted); background: none; border: 1px dashed var(--line); }
+  .ichips button[aria-pressed="true"] { color: var(--ic); border: 1px solid var(--ic); background: rgba(255, 255, 255, .05); box-shadow: 0 0 12px color-mix(in srgb, var(--ic) 35%, transparent); }
+  .ichips button:disabled { cursor: default; }
+  .ihint { font-size: 12px; color: var(--muted); margin: 0; }
   @media (prefers-reduced-motion: reduce) { #itembtn { animation: none; } }
   @media (prefers-reduced-motion: reduce) { #timer.hot, #status.wait .led, .conn.wait i, #toast, #players li.new { animation: none; } }
 </style>
@@ -167,6 +177,7 @@
 <div id="toast" hidden></div>
 
 <button id="itembtn" type="button" hidden>TURBO</button>
+<div id="itemtip" hidden></div>
 
 <div id="pad" hidden><div class="base"><div class="knob"></div></div></div>
 
@@ -184,6 +195,11 @@
     <div class="lobby">
       <div class="label">Lobby</div>
       <ul id="players"></ul>
+    </div>
+    <div class="lobby">
+      <div class="label" id="itemlabel">Items</div>
+      <div class="ichips" id="itemchips" role="group" aria-labelledby="itemlabel"></div>
+      <p class="ihint" id="ihint"></p>
     </div>
     <button id="go" type="button">Runde starten</button>
     <div class="lobby">
@@ -306,7 +322,16 @@
   // ids[i]: wer fliegt Schiff i (Peer-Id, "bot" oder null). Slot 0 ist immer der Host.
   const S = { ph: "lobby", tl: ROUND, cd: 0, rn: 0, ids: [null, "bot", null, null], n: ["Spieler 1", "Bot", "", ""], s: [0, 0, 0, 0], st: [0, 0, 0, 0], pl: SPAWN.map(p => p.slice()), o: [], m: [],
     b: [], it: [0, 0, 0, 0], tu: [0, 0, 0, 0], mg: [0, 0, 0, 0], sh: [0, 0, 0, 0], emp: [0, 0, 0, 0] };
-  let boxT = 5000, useCount = 0, hideItemUntil = 0;
+  let boxT = 5000, useCount = 0, hideItemUntil = 0, tipT = 0;
+  // en: Bitmaske der erlaubten Items (Bit 1..5), wählt der Host in der Lobby
+  S.en = 62;
+  try { const v = parseInt(localStorage.getItem("orbduell.items"), 10); if (v >= 0 && v <= 62) S.en = v & 62; } catch (e) { }
+  ITEMS.forEach((it, k) => {
+    if (!it) return;
+    const b = document.createElement("button"); b.type = "button"; b.dataset.item = k; b.textContent = it.n; b.title = it.tip; b.style.setProperty("--ic", it.c);
+    b.addEventListener("click", () => { if (!isHost) return; S.en ^= 1 << k; try { localStorage.setItem("orbduell.items", S.en); } catch (e) { } });
+    $("itemchips").appendChild(b);
+  });
   const inv = [0, 0, 0, 0], usedSeen = new Map();
   let isHost = true, mySlot = 0;
   let orbId = 1;
@@ -421,7 +446,7 @@
       const want = (S.tl < 15000 ? 5 : S.tl < 35000 ? 4 : 3) + extra;
       while (S.m.filter(m => m.w == null).length < want) S.m.push(makeMine());
       S.m = S.m.filter(m => m.w == null || (m.life -= ms) > 0);
-      if ((boxT -= ms) <= 0) { boxT = 7000 + Math.random() * 4000; if (S.b.length < (players() > 2 ? 2 : 1)) spawnBox(); }
+      if ((boxT -= ms) <= 0) { boxT = 7000 + Math.random() * 4000; if (S.en && S.b.length < (players() > 2 ? 2 : 1)) spawnBox(); }
       if (S.ids[1] === "bot" && S.it[1] && Math.random() < dt * .6) useItem(1);
       for (let i = 0; i < MAXP; i++) {
         if (!active(i) || !S.mg[i]) continue;
@@ -440,7 +465,7 @@
         if (!active(i)) continue;
         const [px, py] = S.pl[i];
         S.o = S.o.filter(o => { if (Math.hypot(o.x - px, o.y - py) < SHIP_R + ORB_R + (o.k ? 6 : 0)) { S.s[i] += o.k ? 5 : 1; return false; } return true; });
-        if (!S.it[i]) S.b = S.b.filter(b => { if (Math.hypot(b.x - px, b.y - py) < SHIP_R + BOX_R) { S.it[i] = 1 + Math.floor(Math.random() * 5); return false; } return true; });
+        if (!S.it[i]) S.b = S.b.filter(b => { if (Math.hypot(b.x - px, b.y - py) < SHIP_R + BOX_R) { const ok = [1, 2, 3, 4, 5].filter(k => S.en & (1 << k)); if (!ok.length) return true; S.it[i] = ok[Math.floor(Math.random() * ok.length)]; return false; } return true; });
         if (S.st[i] <= 0 && inv[i] <= 0) for (const m of S.m) if (m.w !== i && Math.hypot(m.x - px, m.y - py) < SHIP_R + MINE_R - 6) {
           if (S.sh[i]) { S.sh[i] = 0; inv[i] = 900; }
           else { S.s[i] = Math.max(0, S.s[i] - 3); S.st[i] = 1400; }
@@ -457,7 +482,7 @@
     return {
       ph: S.ph, tl: r(S.tl), cd: r(S.cd), rn: S.rn, ids: S.ids, n: S.n, s: S.s, st: S.st.map(r),
       o: S.o.map(o => [o.id, r(o.x), r(o.y), o.k]), m: S.m.map(m => [r(m.x), r(m.y), m.w ?? -1]),
-      b: S.b.map(b => [b.id, r(b.x), r(b.y)]), it: S.it, tu: S.tu.map(r), mg: S.mg.map(r), sh: S.sh, emp: S.emp,
+      b: S.b.map(b => [b.id, r(b.x), r(b.y)]), it: S.it, tu: S.tu.map(r), mg: S.mg.map(r), sh: S.sh, emp: S.emp, en: S.en,
       pl: S.pl.map(p => [r(p[0]), r(p[1]), r(p[2] * 100)]),
     };
   }
@@ -479,6 +504,7 @@
     S.mg = arr4(st.mg, v => num(v, 0, 0, MAGNET)) || S.mg;
     S.sh = arr4(st.sh, v => v === 1 ? 1 : 0) || S.sh;
     S.emp = arr4(st.emp, v => num(v, 0, 0, 1e6)) || S.emp;
+    S.en = Math.round(num(st.en, S.en, 0, 62)) & 62;
     const pl = arr4(st.pl, (p, i) => Array.isArray(p) ? [num(p[0], SPAWN[i][0], 0, W), num(p[1], SPAWN[i][1], 0, H), num(p[2], 0, -700, 700) / 100] : S.pl[i]);
     if (pl) S.pl = pl;
   }
@@ -678,7 +704,7 @@
         if (S.it[i] && !prev.it[i]) {
           const b = [...prev.b.values()].sort((a, c) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(c.x - p.x, c.y - p.y))[0] || p;
           burst(b.x, b.y, SPR.box, 36, 520); rings.push({ x: b.x, y: b.y, t: 0, c: "#6BFFB0" });
-          if (i === mySlot) { const it = ITEMS[S.it[i]]; toast(`${it.n}! ${it.tip}`, false); sfx.gold(); buzz(30); }
+          if (i === mySlot) { tipT = 2.5; sfx.gold(); buzz(30); }
         }
         if (S.emp[i] > prev.emp[i]) { rings.push({ x: p.x, y: p.y, t: 0, c: ITEMS[5].c, big: 1 }); burst(p.x, p.y, PSPR[i], 60, 900, .9); sfx.emp(); if (i !== mySlot) { shake = 16; buzz([50, 30, 50]); } }
         if ((S.tu[i] > 0 && !prev.tu[i]) || (S.mg[i] > 0 && !prev.mg[i]) || (S.sh[i] && !prev.sh[i])) { rings.push({ x: p.x, y: p.y, t: 0, c: S.sh[i] && !prev.sh[i] ? ITEMS[3].c : S.tu[i] && !prev.tu[i] ? ITEMS[1].c : ITEMS[2].c }); if (i === mySlot) sfx.pow(); }
@@ -793,6 +819,18 @@
     setHidden("itembtn", !held);
     if (held && uiCache.held !== held) { uiCache.held = held; $("itembtn").textContent = ITEMS[held].n.toUpperCase(); $("itembtn").style.setProperty("--ic", ITEMS[held].c); }
     if (!held) uiCache.held = 0;
+    if (tipT > 0) tipT -= dt;
+    const tip = held && tipT > 0 ? held : 0;
+    setHidden("itemtip", !tip);
+    if (tip && uiCache.tip !== tip) { uiCache.tip = tip; $("itemtip").innerHTML = `<b>${ITEMS[tip].n}</b> ${ITEMS[tip].tip}`; $("itemtip").style.setProperty("--ic", ITEMS[tip].c); }
+    if (!tip) uiCache.tip = 0;
+    // Item-Auswahl in der Lobby
+    const enSig = S.en + "|" + isHost;
+    if (uiCache.en !== enSig) {
+      uiCache.en = enSig;
+      document.querySelectorAll("[data-item]").forEach(b => { b.setAttribute("aria-pressed", String(!!(S.en & (1 << b.dataset.item)))); b.disabled = !isHost; });
+      setText("ihint", isHost ? (S.en ? "Tippen zum An- und Abwählen." : "Keine Items: es erscheinen keine Kisten.") : `${S.n[0] || "Der Host"} wählt die Items.`);
+    }
     const kc = COL[mySlot ?? 0]; if (uiCache.kc !== kc) { uiCache.kc = kc; pad.style.setProperty("--c", kc); }
   }
 
