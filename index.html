@@ -28,7 +28,7 @@
   }
   *, *::before, *::after { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--bg); color: var(--ink); -webkit-tap-highlight-color: transparent; }
   body { font-family: var(--body); touch-action: none; user-select: none; -webkit-user-select: none; }
   #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
@@ -134,14 +134,14 @@
   .seg button[aria-pressed="true"] { color: #0B0620; background: var(--p1); box-shadow: 0 0 16px rgba(87, 225, 255, .35); }
 
   /* ---------- Joystick ---------- */
-  #pad { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; justify-content: center; touch-action: none;
-    padding: 8px 16px calc(env(safe-area-inset-bottom, 0px) + 14px); --c: var(--p1); }
-  #pad .base { position: relative; width: 132px; height: 132px; border-radius: 50%; border: 1px solid var(--line);
+  #pad { position: fixed; inset: 0; z-index: 1; pointer-events: none; --c: var(--p1); }
+  #pad .base { position: absolute; left: 0; top: 0; width: 132px; height: 132px; margin: -66px; border-radius: 50%; border: 1px solid var(--line); opacity: .4; transition: opacity .15s;
     background: radial-gradient(circle, rgba(20, 12, 48, .35), rgba(20, 12, 48, .8)); box-shadow: inset 0 0 26px rgba(160, 140, 255, .18); }
   #pad .base::before { content: ""; position: absolute; inset: 30%; border-radius: 50%; border: 1px dashed var(--line); }
   #pad .knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px; border-radius: 50%;
     background: radial-gradient(circle at 38% 34%, #fff, var(--c) 55%); box-shadow: 0 0 20px var(--c); opacity: .85; }
   #pad.on .knob { opacity: 1; }
+  #pad.on .base { opacity: 1; transition: none; }
   /* ---------- Item-Knopf ---------- */
   #itembtn { position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); z-index: 2; width: 84px; height: 84px; border-radius: 50%;
     display: grid; place-items: center; font: 700 13px var(--disp); letter-spacing: .08em; color: var(--ic); cursor: pointer;
@@ -265,7 +265,7 @@
     vw = innerWidth; vh = innerHeight;
     cv.width = vw * dpr; cv.height = vh * dpr;
     const top = $("hud").getBoundingClientRect().bottom + 8;
-    const bottom = $("pad").hidden ? 10 : vh - $("pad").getBoundingClientRect().top + 4;
+    const bottom = 10;
     sc = Math.min((vw - 16) / W, (vh - top - bottom) / H);
     ox = (vw - W * sc) / 2; oy = top + ((vh - top - bottom) - H * sc) / 2;
     nebula = document.createElement("canvas"); nebula.width = Math.max(1, vw / 2); nebula.height = Math.max(1, vh / 2);
@@ -578,16 +578,26 @@
 
   // ---------- input ----------
   function toWorld(e) { return [clamp((e.clientX - ox) / sc, 40, W - 40), clamp((e.clientY - oy) / sc, 40, H - 40)]; }
-  cv.addEventListener("pointerdown", e => { audio(); if (ctl === "stick") return; try { cv.setPointerCapture(e.pointerId); } catch (x) { } [me.tx, me.ty] = toWorld(e); });
+  cv.addEventListener("pointerdown", e => { audio(); if (ctl === "stick") { stickStart(e); return; } try { cv.setPointerCapture(e.pointerId); } catch (x) { } [me.tx, me.ty] = toWorld(e); });
   cv.addEventListener("pointermove", e => { if (ctl !== "stick" && (e.pointerType === "mouse" || e.buttons || e.pressure > 0)) [me.tx, me.ty] = toWorld(e); });
 
   // Joystick: Auslenkung = Richtung und Tempo, loslassen = Schiff bremst ab
-  const pad = $("pad"), knob = pad.querySelector(".knob"), stick = { id: null, x: 0, y: 0 };
+  const pad = $("pad"), knob = pad.querySelector(".knob"), stick = { id: null, x: 0, y: 0, cx: 0, cy: 0 };
   let ctl = "touch";
   try { ctl = localStorage.getItem("orbduell.ctl") === "stick" ? "stick" : "touch"; } catch (e) { }
+  // Schwebender Joystick: erscheint dort, wo der Daumen aufsetzt. In Ruhe liegt er unten mittig.
+  const base = pad.querySelector(".base");
+  function placeBase(x, y) { stick.cx = x; stick.cy = y; base.style.transform = `translate(${x}px, ${y}px)`; }
+  function restBase() { placeBase(innerWidth / 2, innerHeight - 110); }
+  function stickStart(e) {
+    if (stick.id !== null) return;
+    stick.id = e.pointerId; try { cv.setPointerCapture(e.pointerId); } catch (x) { }
+    placeBase(clamp(e.clientX, 70, innerWidth - 70), clamp(e.clientY, 70, innerHeight - 70));
+    pad.classList.add("on"); stickMove(e);
+  }
   function stickMove(e) {
-    const r = pad.querySelector(".base").getBoundingClientRect(), R = r.width / 2;
-    let dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R);
+    const R = 66;
+    let dx = e.clientX - stick.cx, dy = e.clientY - stick.cy;
     const m = Math.hypot(dx, dy); if (m > R) { dx *= R / m; dy *= R / m; }
     const f = Math.hypot(dx, dy) / R < .12 ? 0 : 1;
     stick.x = dx / R * f; stick.y = dy / R * f;
@@ -595,16 +605,18 @@
   }
   function stickEnd(e) {
     if (e.pointerId !== stick.id) return;
-    stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; pad.classList.remove("on");
+    stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; pad.classList.remove("on"); restBase();
   }
-  pad.addEventListener("pointerdown", e => { audio(); stick.id = e.pointerId; try { pad.setPointerCapture(e.pointerId); } catch (x) { } pad.classList.add("on"); stickMove(e); });
-  pad.addEventListener("pointermove", e => { if (e.pointerId === stick.id) stickMove(e); });
-  pad.addEventListener("pointerup", stickEnd); pad.addEventListener("pointercancel", stickEnd); pad.addEventListener("lostpointercapture", stickEnd);
+  cv.addEventListener("pointermove", e => { if (ctl === "stick" && e.pointerId === stick.id) stickMove(e); });
+  cv.addEventListener("pointerup", stickEnd); cv.addEventListener("pointercancel", stickEnd); cv.addEventListener("lostpointercapture", stickEnd);
+  addEventListener("resize", () => { if (stick.id === null) restBase(); });
+  // In-App-Browser (WhatsApp, Instagram …) scrollen sonst beim Wischen die Seite mit
+  document.addEventListener("touchmove", e => { if (!e.target.closest || !e.target.closest("#overlay")) e.preventDefault(); }, { passive: false });
   function setCtl(v) {
     ctl = v; try { localStorage.setItem("orbduell.ctl", v); } catch (e) { }
     document.querySelectorAll("[data-ctl]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ctl === v)));
-    $("ctlhelp").textContent = v === "stick" ? "Joystick unten schieben, loslassen bremst." : "Finger aufs Feld, dein Schiff fliegt hinterher.";
-    pad.hidden = v !== "stick"; stick.x = stick.y = 0; knob.style.transform = "";
+    $("ctlhelp").textContent = v === "stick" ? "Daumen irgendwo aufs Feld und schieben, loslassen bremst." : "Finger aufs Feld, dein Schiff fliegt hinterher.";
+    pad.hidden = v !== "stick"; stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; pad.classList.remove("on"); restBase();
     me.tx = me.x; me.ty = me.y; resize();
   }
   document.querySelectorAll("[data-ctl]").forEach(b => b.addEventListener("click", () => setCtl(b.dataset.ctl)));
